@@ -63,7 +63,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, setDoc, getDoc, onSnapshot, updateDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Your web app's Firebase configuration
         const firebaseConfig = {
@@ -101,6 +101,7 @@
         let roomConfig = {};
         let finalCast = [];
         let currentRoomId = null;
+        let isCurrentUserHost = false;
         let playerListenerUnsubscribe = null; // To stop listening to player changes
         let roomListenerUnsubscribe = null; // To stop listening to room changes
 
@@ -119,11 +120,6 @@
         const winnerModal = document.getElementById('winner-modal');
         const rankingModal = document.getElementById('ranking-modal');
         const joinRoomModal = document.getElementById('join-room-modal');
-
-        // --- Game Logic Functions (unchanged from your original) ---
-        // All your functions like runGameCycle, mergeTeams, runChallenge, etc. go here
-        // ... I've omitted them for brevity but they should be pasted back here ...
-        // --- End of Original Game Logic Functions ---
         
         // --- Multiplayer & UI Functions ---
 
@@ -150,6 +146,7 @@
             }
 
             currentRoomId = roomId;
+            isCurrentUserHost = false;
             roomConfig = roomSnap.data().config;
 
             // Add player to the room
@@ -164,7 +161,6 @@
             document.getElementById('start-game-btn').classList.add('hidden');
             document.getElementById('host-panel-title').textContent = "Pannello Giocatore";
             document.getElementById('next-step-btn').classList.add('hidden');
-
 
             listenForPlayers(currentRoomId);
             listenForGameUpdates(currentRoomId); // Listen for game start
@@ -201,17 +197,44 @@
              if (roomListenerUnsubscribe) roomListenerUnsubscribe(); // Stop previous listener
 
              roomListenerUnsubscribe = onSnapshot(roomRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const roomData = docSnap.data();
-                    // If the game has started, switch to the game screen
-                    if (roomData.gameState && roomData.gameState.status === 'started') {
-                        gameState = roomData.gameState;
-                        roomConfig = roomData.config;
-                        showScreen('main-game-screen');
-                        prepareNextEpisode(); // Use the state from Firebase
-                    }
+                if (!docSnap.exists()) return;
+
+                const roomData = docSnap.data();
+                const newGameState = roomData.gameState;
+                if (!newGameState) return;
+
+                const isGameStarting = newGameState.status === 'started' && (!gameState || gameState.status !== 'started');
+                
+                // Always sync local state with Firebase state
+                gameState = newGameState;
+                roomConfig = roomData.config;
+
+                if (isGameStarting) {
+                    console.log("Game start detected! Initializing game screen for all players.");
+                    showScreen('main-game-screen');
+                }
+
+                if (gameState.status === 'started') {
+                    updateUIFromGameState();
                 }
              });
+        }
+        
+        function updateUIFromGameState() {
+            if (!gameState || gameState.status !== 'started') return;
+            
+            episodeTitle.textContent = `Episodio ${gameState.episode}`;
+            gameStatusText.textContent = gameState.currentStatusText || '';
+            
+            if (isCurrentUserHost) {
+                hostInstructions.textContent = gameState.currentHostInstructions || '';
+                document.getElementById('next-step-btn').classList.remove('hidden');
+            } else {
+                hostInstructions.textContent = "In attesa che l'host continui il gioco...";
+                document.getElementById('next-step-btn').classList.add('hidden');
+            }
+
+            updateContestantsUI();
         }
 
         function displayRoomCode(roomId) {
@@ -297,7 +320,6 @@
                 };
                 
                 try {
-                    // Create the room document with initial state
                     const roomDocRef = await addDoc(collection(db, "rooms"), {
                         config: roomConfig,
                         gameState: { status: 'lobby' },
@@ -305,9 +327,9 @@
                     });
                     
                     currentRoomId = roomDocRef.id;
+                    isCurrentUserHost = true;
                     console.log("Stanza creata con ID: ", currentRoomId);
 
-                    // Add the host as the first player in the subcollection
                     const hostPlayerRef = doc(db, "rooms", currentRoomId, "players", currentUser.uid);
                     await setDoc(hostPlayerRef, {
                         nickname: document.getElementById('nickname').value,
@@ -317,6 +339,7 @@
 
                     displayRoomCode(currentRoomId);
                     listenForPlayers(currentRoomId);
+                    listenForGameUpdates(currentRoomId); // Host must also listen for updates
 
                     createRoomModal.style.display = 'none';
                     showScreen('game-room');
@@ -330,12 +353,23 @@
 
             // HOST: Start Game
             document.getElementById('start-game-btn').addEventListener('click', async () => {
-                setupGame(); // This function now just prepares the gameState object
+                setupGame(); // Prepares the initial gameState object
+                prepareNextEpisode(); // Prepares the first episode state
                 
-                // Save the initial game state to Firebase to trigger the start for all players
                 const roomRef = doc(db, "rooms", currentRoomId);
                 await updateDoc(roomRef, {
                     gameState: { ...gameState, status: 'started' }
+                });
+            });
+
+            // HOST: Next Step Button
+            nextStepBtn.addEventListener('click', async () => {
+                if (!isCurrentUserHost) return;
+                runGameCycle(); // This updates the local gameState object
+                
+                const roomRef = doc(db, "rooms", currentRoomId);
+                await updateDoc(roomRef, {
+                    gameState: gameState
                 });
             });
 
@@ -353,14 +387,9 @@
                     card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
                     card.dataset.name = character.name;
                     card.innerHTML = `<img src="${character.img}" alt="${character.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none" onerror="this.src='https://placehold.co/100x128/cccccc/000000?text=N/A'"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${character.name}</p>`;
-                    if (roomConfig.castSelection === 'manual' && currentUser.uid) { // Only host can select
-                         const playerList = document.getElementById('player-list');
-                         const hostElement = playerList.querySelector('span:contains("(Host)")');
-                         if (hostElement) { // Check if the current user is the host
-                             card.addEventListener('click', () => handleCharacterClick(card));
-                         } else {
-                             card.classList.add('disabled');
-                         }
+                    
+                    if (roomConfig.castSelection === 'manual' && isCurrentUserHost) {
+                        card.addEventListener('click', () => handleCharacterClick(card));
                     } else {
                         card.classList.add('disabled');
                     }
@@ -380,8 +409,15 @@
 
             const updateStartButton = () => {
                 const btn = document.getElementById('start-game-btn');
-                if (roomConfig.castSelection === 'manual') btn.disabled = document.querySelectorAll('#cast-container .character-card.selected').length !== parseInt(roomConfig.numContestants, 10);
-                else btn.disabled = false;
+                if (!isCurrentUserHost) {
+                    btn.disabled = true;
+                    return;
+                }
+                if (roomConfig.castSelection === 'manual') {
+                    btn.disabled = document.querySelectorAll('#cast-container .character-card.selected').length !== parseInt(roomConfig.numContestants, 10);
+                } else {
+                    btn.disabled = false;
+                }
             };
             
             function setupGame() {
@@ -394,9 +430,8 @@
                 const shuffledCast = [...finalCast].sort(() => 0.5 - Math.random());
                 const numTeams = parseInt(roomConfig.numTeams, 10);
                 
-                // Initialize gameState
                 gameState = {
-                    episode: 0, // Will be incremented to 1
+                    episode: 0,
                     phase: 'CHALLENGE',
                     isMerged: false,
                     teams: Array.from({ length: numTeams }, (_, i) => ({ name: `Squadra ${i + 1}`, members: [] })),
@@ -406,53 +441,43 @@
                     eliminatedContestants: [],
                     timerInterval: null,
                     comebacksUsed: 0,
+                    currentStatusText: '',
+                    currentHostInstructions: ''
                 };
                 
                 shuffledCast.forEach((member, index) => gameState.teams[index % numTeams].members.push(member));
             }
             
+            // --- Game Logic Functions (Modified to update gameState object) ---
+            
             function prepareNextEpisode() {
-                // This function now just updates the local state and UI based on gameState
                 gameState.episode++;
                 gameState.phase = 'CHALLENGE';
-                episodeTitle.textContent = `Episodio ${gameState.episode}`;
-                gameStatusText.textContent = `Benvenuti al nuovo episodio!`;
-                hostInstructions.textContent = "Pronto per la prossima sfida? Clicca 'Procedi'.";
+                gameState.currentStatusText = `Benvenuti all'episodio ${gameState.episode}!`;
+                gameState.currentHostInstructions = "Pronto per la prossima sfida? Clicca 'Procedi'.";
                 gameState.immuneContestants = [];
-                updateContestantsUI();
             }
             
-            // --- PASTE YOUR ORIGINAL GAME LOGIC FUNCTIONS HERE ---
-            // (runGameCycle, mergeTeams, conductElimination, etc.)
-            // --- This is important! Your game logic is needed. ---
             function runGameCycle() {
-                // If we are already in the finale, the only action is to vote.
                 if (gameState.phase === 'FINALE') {
                     startFinaleVoting();
                     return;
                 }
-
-                // Check for Finale condition first
                 if (gameState.isMerged && gameState.individualPlayers.length <= 2) {
                     startFinale();
                     return;
                 }
-
-                // Check for Comeback event
                 if (roomConfig.comebackEnabled && gameState.episode === roomConfig.comebackEpisode && gameState.comebacksUsed < roomConfig.comebackCount) {
                     gameState.phase = 'COMEBACK';
-                    hostInstructions.textContent = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
-                    gameStatusText.textContent = "Una seconda possibilità è all'orizzonte...";
+                    gameState.currentHostInstructions = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
+                    gameState.currentStatusText = "Una seconda possibilità è all'orizzonte...";
                     return;
                 }
-
-                // Check for merge condition
                 const activeTeams = gameState.teams.filter(team => team.members.length > 0);
                 if (!gameState.isMerged && (gameState.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
                     mergeTeams();
                     return;
                 }
-
                 switch (gameState.phase) {
                     case 'CHALLENGE': runChallenge(); break;
                     case 'VOTE': startVoting(); break;
@@ -466,9 +491,8 @@
                 gameState.individualPlayers = [];
                 gameState.teams.forEach(team => { gameState.individualPlayers.push(...team.members); });
                 gameState.teams = [];
-                gameStatusText.textContent = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
-                hostInstructions.textContent = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
-                updateContestantsUI();
+                gameState.currentStatusText = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
+                gameState.currentHostInstructions = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
             }
 
             function runChallenge() {
@@ -476,7 +500,7 @@
                 if (gameState.isMerged) {
                     const winner = gameState.individualPlayers[Math.floor(Math.random() * gameState.individualPlayers.length)];
                     gameState.immuneContestants.push(winner.name);
-                    gameStatusText.textContent = `${winner.name} vince la sfida e ottiene l'immunità!`;
+                    gameState.currentStatusText = `${winner.name} vince la sfida e ottiene l'immunità!`;
                 } else {
                     const activeTeams = gameState.teams.filter(team => team.members.length > 0);
                     const shuffledTeams = [...activeTeams].sort(() => 0.5 - Math.random());
@@ -491,11 +515,10 @@
                             gameState.immuneContestants.push(randomImmuneMember.name);
                         }
                     });
-                    gameStatusText.textContent = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
+                    gameState.currentStatusText = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
                 }
                 
-                hostInstructions.textContent = "È il momento di votare! Clicca 'Procedi' per aprire la scheda di voto.";
-                updateContestantsUI();
+                gameState.currentHostInstructions = "È il momento di votare! Clicca 'Procedi' per aprire la scheda di voto.";
                 gameState.phase = 'VOTE';
             }
 
@@ -511,23 +534,17 @@
                 const votingContainer = document.getElementById('voting-candidates-container');
                 votingContainer.innerHTML = '';
 
-                // AUTOMATIC ELIMINATION LOGIC
                 if (!gameState.isMerged && candidates.length === 1) {
                     const eliminated = candidates[0];
-                    gameStatusText.textContent = `${eliminated.name} è l'ultimo membro della squadra perdente e viene eliminato automaticamente!`;
-                    
-                    // Update state
+                    gameState.currentStatusText = `${eliminated.name} è l'ultimo membro della squadra perdente e viene eliminato automaticamente!`;
                     gameState.teams[gameState.losingTeamIndex].members = [];
                     gameState.eliminatedContestants.push(eliminated);
-
-                    setTimeout(() => {
-                        prepareNextEpisode();
-                    }, 4000); // Wait 4 seconds before continuing
+                    setTimeout(prepareNextEpisode, 4000);
                     return;
                 }
 
                 if (candidates.length <= 1) {
-                    gameStatusText.textContent = "Non ci sono abbastanza concorrenti per una votazione. Si procede al prossimo episodio.";
+                    gameState.currentStatusText = "Non ci sono abbastanza concorrenti per una votazione. Si procede al prossimo episodio.";
                     prepareNextEpisode();
                     return;
                 }
@@ -547,7 +564,7 @@
                 });
 
                 votingModal.style.display = 'flex';
-                hostInstructions.textContent = "Votazione in corso...";
+                gameState.currentHostInstructions = "Votazione in corso...";
             }
 
             function conductElimination(votes) {
@@ -558,6 +575,8 @@
             }
 
             async function runEliminationCeremony(eliminationCandidates) {
+                // This function is highly visual and depends on timing, so direct DOM manipulation is okay here.
+                // We'll ensure the final state is synced at the end.
                 const ceremonyCandidatesContainer = document.getElementById('ceremony-candidates-container');
                 const ceremonyStatus = document.getElementById('ceremony-status');
                 const ceremonyDetails = document.getElementById('ceremony-details');
@@ -576,8 +595,9 @@
 
                 ceremonyModal.style.display = 'flex';
                 
-                let timeLeft = 60;
+                let timeLeft = 5; // Shortened for testing
                 ceremonyTimer.textContent = timeLeft;
+                if(gameState.timerInterval) clearInterval(gameState.timerInterval);
                 gameState.timerInterval = setInterval(() => {
                     timeLeft--;
                     ceremonyTimer.textContent = timeLeft >= 0 ? timeLeft : 0;
@@ -586,57 +606,53 @@
 
                 const safeContestants = atRiskContestants.filter(m => !eliminationCandidates.includes(m.name));
                 for (const safe of [...safeContestants].sort(() => 0.5 - Math.random())) {
-                    await new Promise(r => setTimeout(r, 2500));
+                    await new Promise(r => setTimeout(r, 1500));
                     ceremonyStatus.textContent = `${safe.name}...`;
                     ceremonyDetails.textContent = "Sei salvo stasera.";
                     document.getElementById(`ceremony-card-${safe.name.replace(/\s+/g, '-')}`).classList.add('fading-out');
                 }
 
-                await new Promise(r => setTimeout(r, 3000));
+                await new Promise(r => setTimeout(r, 2000));
                 
                 const finalTwo = atRiskContestants.filter(m => eliminationCandidates.includes(m.name));
                 if (finalTwo.length < 2) { 
                     ceremonyModal.style.display = 'none'; 
                     prepareNextEpisode(); 
+                    await updateDoc(doc(db, "rooms", currentRoomId), { gameState: gameState });
                     return; 
                 }
 
                 const eliminatedName = finalTwo[Math.floor(Math.random() * finalTwo.length)].name;
                 const savedName = finalTwo.find(p => p.name !== eliminatedName).name;
-                const announceOrder = [eliminatedName, savedName].sort(() => 0.5 - Math.random());
                 
                 ceremonyStatus.textContent = `L'ultima persona salva è...`;
                 ceremonyDetails.textContent = `...`;
-                await new Promise(r => setTimeout(r, 3000));
-                ceremonyStatus.textContent = `${announceOrder[0]}...`;
-                await new Promise(r => setTimeout(r, 4000));
+                await new Promise(r => setTimeout(r, 2000));
+                ceremonyStatus.textContent = `${savedName}...`;
+                ceremonyDetails.textContent = "SEI SALVO!";
+                document.getElementById(`ceremony-card-${savedName.replace(/\s+/g, '-')}`).classList.add('fading-out');
 
-                if (announceOrder[0] === savedName) {
-                    ceremonyDetails.textContent = "SEI SALVO!";
-                    document.getElementById(`ceremony-card-${savedName.replace(/\s+/g, '-')}`).classList.add('fading-out');
-                    await new Promise(r => setTimeout(r, 1000));
-                    ceremonyStatus.textContent = `${eliminatedName}, sei eliminato.`;
-                } else {
-                    ceremonyDetails.textContent = "SEI ELIMINATO!";
-                    ceremonyStatus.textContent = `${savedName}, questo significa che sei salvo.`;
-                }
+                await new Promise(r => setTimeout(r, 2000));
+                ceremonyStatus.textContent = `${eliminatedName}, sei eliminato.`;
                 document.getElementById(`ceremony-card-${eliminatedName.replace(/\s+/g, '-')}`).classList.add('eliminated');
 
+                // Update the actual gameState
                 if(gameState.isMerged) { gameState.individualPlayers = gameState.individualPlayers.filter(p => p.name !== eliminatedName); } 
                 else { gameState.teams[gameState.losingTeamIndex].members = gameState.teams[gameState.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
                 gameState.eliminatedContestants.push(castData.find(c => c.name === eliminatedName));
 
-                await new Promise(r => setTimeout(r, 4000));
+                await new Promise(r => setTimeout(r, 3000));
                 clearInterval(gameState.timerInterval);
                 ceremonyModal.style.display = 'none';
                 
                 prepareNextEpisode();
+                await updateDoc(doc(db, "rooms", currentRoomId), { gameState: gameState });
             }
 
             function startComebackVoting() {
                 const candidates = gameState.eliminatedContestants;
                 if (candidates.length === 0) {
-                    gameStatusText.textContent = "Nessun eliminato da far rientrare. Si prosegue.";
+                    gameState.currentStatusText = "Nessun eliminato da far rientrare. Si prosegue.";
                     prepareNextEpisode();
                     return;
                 }
@@ -670,8 +686,7 @@
                 comebackVotingModal.style.display = 'flex';
             }
 
-            function conductComeback(hostVotes) {
-                // Simulate other votes
+            async function conductComeback(hostVotes) {
                 const votedPool = [...new Set([...hostVotes, gameState.eliminatedContestants[Math.floor(Math.random() * gameState.eliminatedContestants.length)].name])];
                 const shuffledPool = votedPool.sort(() => 0.5 - Math.random());
                 const returningContestants = shuffledPool.slice(0, roomConfig.comebackCount);
@@ -679,11 +694,9 @@
                 returningContestants.forEach(name => {
                     const contestant = gameState.eliminatedContestants.find(c => c.name === name);
                     if (contestant) {
-                        // Add back to individual players if merged, otherwise find a team
                         if(gameState.isMerged) {
                             gameState.individualPlayers.push(contestant);
                         } else {
-                            // Add to the smallest team
                             let smallestTeam = gameState.teams.reduce((prev, curr) => prev.members.length <= curr.members.length ? prev : curr);
                             smallestTeam.members.push(contestant);
                         }
@@ -691,17 +704,16 @@
                     }
                 });
 
-                gameStatusText.textContent = `${returningContestants.join(' e ')} tornano in gioco!`;
+                gameState.currentStatusText = `${returningContestants.join(' e ')} tornano in gioco!`;
                 gameState.comebacksUsed += returningContestants.length;
                 prepareNextEpisode();
+                await updateDoc(doc(db, "rooms", currentRoomId), { gameState: gameState });
             }
             
             function startFinale() {
                 gameState.phase = 'FINALE';
-                episodeTitle.textContent = 'GRAN FINALE';
-                gameStatusText.textContent = `Siamo arrivati alla fine! Chi vincerà tra ${gameState.individualPlayers[0].name} e ${gameState.individualPlayers[1].name}?`;
-                hostInstructions.textContent = "È il momento di votare il vincitore! Clicca 'Procedi'.";
-                updateContestantsUI();
+                gameState.currentStatusText = `Siamo arrivati alla fine! Chi vincerà tra ${gameState.individualPlayers[0].name} e ${gameState.individualPlayers[1].name}?`;
+                gameState.currentHostInstructions = "È il momento di votare il vincitore! Clicca 'Procedi'.";
             }
 
             function startFinaleVoting() {
@@ -723,7 +735,6 @@
 
             async function conductFinale(hostVote) {
                 const finalists = gameState.individualPlayers;
-                // Simulate a jury vote, host vote breaks a 50/50 tie
                 const winner = Math.random() > 0.5 ? finalists[0] : finalists[1];
                 const loser = finalists.find(p => p.name !== winner.name);
 
@@ -731,7 +742,7 @@
                 const winnerAnnouncement = document.getElementById('winner-announcement');
                 
                 winnerAnnouncement.textContent = "E il vincitore è...";
-                winnerCardContainer.innerHTML = ''; // Clear previous
+                winnerCardContainer.innerHTML = '';
                 
                 finalists.forEach(finalist => {
                     const card = document.createElement('div');
@@ -742,13 +753,11 @@
                 });
                 
                 winnerModal.style.display = 'flex';
-
-                await new Promise(r => setTimeout(r, 4000)); // Suspense before reveal
+                await new Promise(r => setTimeout(r, 4000));
 
                 document.getElementById(`winner-card-${loser.name.replace(/\s+/g, '-')}`).classList.add('eliminated');
                 document.getElementById(`winner-card-${winner.name.replace(/\s+/g, '-')}`).classList.add('immune-aura');
                 winnerAnnouncement.textContent = `IL VINCITORE È ${winner.name.toUpperCase()}!`;
-
 
                 await new Promise(r => setTimeout(r, 5000));
                 winnerModal.style.display = 'none';
@@ -771,6 +780,8 @@
             }
 
             function updateContestantsUI() {
+                if (!gameState.teams && !gameState.individualPlayers) return;
+
                 const teamsContainer = document.getElementById('teams-container');
                 teamsContainer.innerHTML = '';
 
@@ -798,16 +809,6 @@
                     });
                 }
             }
-
-
-            nextStepBtn.addEventListener('click', async () => {
-                runGameCycle(); // This updates the local gameState
-                // Now, save the updated state to Firebase so everyone sees the change
-                const roomRef = doc(db, "rooms", currentRoomId);
-                await updateDoc(roomRef, {
-                    gameState: gameState
-                });
-            });
         });
     </script>
 </body>

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isola della Sopravvivenza - Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7); } 50% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); } }
+        @keyframes fade-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.9); } }
+        @keyframes winner-reveal { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+        body { font-family: 'Inter', sans-serif; background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png'); background-color: #f0e6d2; overflow-x: hidden; }
+        .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 600px; border-radius: 10px; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover, .close:focus { color: black; text-decoration: none; }
+        .character-card { position: relative; transition: all 0.3s ease; cursor: pointer; border: 3px solid transparent; overflow: hidden; }
+        .character-card.selected { border-color: #10B981; transform: scale(1.05); }
+        .character-card.disabled { cursor: not-allowed; }
+        .character-card.immune-aura { animation: pulse 2s infinite; border-color: #FBBF24; }
+        .character-card.eliminated { filter: grayscale(100%); background-color: #7f1d1d; transform: scale(0.95); }
+        .character-card.fading-out { animation: fade-out 0.5s forwards; }
+        .team-container { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(5px); }
+        .winner-card { animation: winner-reveal 1s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Schermata Menu Principale -->
+    <div id="main-menu" class="min-h-screen flex items-center justify-center">
+        <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+            <h1 class="text-3xl font-bold text-center text-gray-800">Isola della Sopravvivenza</h1>
+            <div><label for="nickname" class="block text-sm font-medium text-gray-700">Nickname</label><input type="text" id="nickname" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" value="Host"></div>
+            <div><label class="block text-sm font-medium text-gray-700">Immagine del Giocatore</label><div class="mt-1 flex items-center space-x-4"><img id="player-image-preview" src="https://placehold.co/80x80/000000/FFFFFF?text=?" class="w-20 h-20 rounded-full object-cover bg-gray-300"><div class="flex flex-col space-y-2"><label for="image-upload" class="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm text-center">Carica File<input type="file" id="image-upload" class="hidden" accept="image/png, image/jpeg"></label><button id="image-url-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm">Usa URL</button></div></div></div>
+            <div class="space-y-4"><button id="create-room-btn" class="w-full px-4 py-3 font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">Crea Stanza</button></div>
+        </div>
+    </div>
+
+    <!-- Schermata Stanza di Gioco (Lobby) -->
+    <div id="game-room" class="hidden w-full h-screen"><div class="flex h-full"><div class="flex-grow p-4 overflow-auto"><h2 id="cast-title" class="text-3xl font-bold text-center mb-2 text-gray-800">Il Cast</h2><p id="cast-subtitle" class="text-center text-gray-600 mb-6"></p><div id="cast-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"></div></div><div class="w-1/4 min-w-[300px] bg-white bg-opacity-80 rounded-lg shadow-lg p-4 flex flex-col"><div id="room-info" class="mb-4 p-3 bg-gray-200 rounded-lg text-center"></div><h3 class="text-2xl font-bold mb-4 text-gray-800">Giocatori</h3><div id="player-list" class="flex-grow space-y-3 overflow-y-auto"></div><div class="mt-4"><button id="start-game-btn" class="w-full px-4 py-3 font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Inizia Partita</button></div></div></div></div>
+
+    <!-- Schermata di Gioco Principale -->
+    <div id="main-game-screen" class="hidden w-full h-screen"><div class="flex h-full"><div class="flex-grow p-4 overflow-auto"><h2 id="episode-title" class="text-4xl font-bold text-center mb-2 text-gray-800"></h2><p id="game-status-text" class="text-center text-xl text-gray-600 mb-8"></p><div id="teams-container" class="flex flex-wrap justify-center gap-6"></div></div><div class="w-1/4 min-w-[300px] bg-white bg-opacity-80 rounded-lg shadow-lg p-4 flex flex-col"><h3 class="text-2xl font-bold mb-4 text-gray-800">Giudici Online</h3><div id="judge-list" class="flex-grow space-y-3 overflow-y-auto"></div><div class="mt-4 border-t pt-4"><h4 class="font-bold text-center text-lg">Pannello Host</h4><p id="host-instructions" class="text-center text-sm text-gray-600 my-2"></p><button id="next-step-btn" class="w-full px-4 py-3 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Procedi</button></div></div></div></div>
+
+    <!-- Modali -->
+    <div id="create-room-modal" class="modal"><div class="modal-content"><span class="close">&times;</span><h2 class="text-xl font-semibold mb-4">Configurazione Stanza</h2><div class="space-y-4"><div><label for="num-contestants" class="block text-sm font-medium">Numero Concorrenti (12-40)</label><input type="number" id="num-contestants" min="12" max="40" value="12" class="w-full mt-1 border-gray-300 rounded-md"></div><div><label for="num-teams" class="block text-sm font-medium">Numero Team (2-6)</label><input type="number" id="num-teams" min="2" max="6" value="2" class="w-full mt-1 border-gray-300 rounded-md"></div><div><label for="merge-episode" class="block text-sm font-medium">Episodio del Merge</label><input type="number" id="merge-episode" min="1" value="7" class="w-full mt-1 border-gray-300 rounded-md"></div><div><label class="block text-sm font-medium">Cast</label><select id="cast-selection" class="w-full mt-1 border-gray-300 rounded-md"><option value="random">Randomizza Cast</option><option value="manual">Scegli uno ad uno</option></select></div><div><label class="block text-sm font-medium">Comeback</label><select id="comeback-selection" class="w-full mt-1 border-gray-300 rounded-md"><option value="none">Nessun Comeback</option><option value="enabled">Abilita Comeback</option></select></div><div id="comeback-options-container" class="hidden"><div><label for="comeback-count" class="block text-sm font-medium">Numero di Comeback</label><input type="number" id="comeback-count" min="1" value="1" class="w-full mt-1 border-gray-300 rounded-md"></div><div class="mt-2"><label for="comeback-episode" class="block text-sm font-medium">Episodio del Comeback</label><input type="number" id="comeback-episode" min="1" value="5" class="w-full mt-1 border-gray-300 rounded-md"></div></div><button id="confirm-create-room" class="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600">Crea Stanza</button></div></div></div>
+    <div id="voting-modal" class="modal"><div class="modal-content"><h2 class="text-2xl font-bold text-center mb-4">Vota per l'eliminazione</h2><p class="text-center mb-4">Clicca sul concorrente che vuoi eliminare.</p><div id="voting-candidates-container" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div></div></div>
+    <div id="comeback-voting-modal" class="modal"><div class="modal-content"><h2 id="comeback-title" class="text-2xl font-bold text-center mb-4">Vota per il Ritorno!</h2><p id="comeback-subtitle" class="text-center mb-4">Scegli 2 concorrenti da far tornare in gioco.</p><div id="comeback-candidates-container" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div><button id="confirm-comeback-vote" class="w-full mt-6 px-4 py-2 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>Conferma Voto</button></div></div>
+    <div id="elimination-ceremony-modal" class="modal bg-black bg-opacity-90"><div class="w-full h-full flex flex-col items-center justify-center text-white p-8"><h2 id="ceremony-status" class="text-5xl font-bold text-yellow-300 drop-shadow-lg mb-4">Cerimonia di Eliminazione</h2><p id="ceremony-details" class="text-2xl mb-8"></p><div id="ceremony-timer" class="text-6xl font-mono mb-8"></div><div id="ceremony-candidates-container" class="flex flex-wrap justify-center gap-6"></div></div></div>
+    <div id="finale-voting-modal" class="modal"><div class="modal-content"><h2 class="text-2xl font-bold text-center mb-4">Voto Finale</h2><p class="text-center mb-4">Chi merita di vincere?</p><div id="finale-candidates-container" class="flex justify-center gap-6"></div></div></div>
+    <div id="winner-modal" class="modal bg-black bg-opacity-90"><div class="w-full h-full flex flex-col items-center justify-center text-white p-8 text-center"><h2 id="winner-announcement" class="text-6xl font-bold drop-shadow-lg mb-8"></h2><div id="winner-card-container" class="flex justify-center gap-8"></div></div></div>
+    <div id="ranking-modal" class="modal"><div class="modal-content"><h2 class="text-3xl font-bold text-center mb-6">Classifica Finale</h2><ol id="ranking-list" class="space-y-3"></ol></div></div>
+    <div id="image-url-modal" class="modal"><div class="modal-content"><span class="close">&times;</span><h2 class="text-xl font-semibold mb-4">Inserisci URL Immagine</h2><input type="text" id="image-url-input" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="https://..."><button id="submit-image-url" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Conferma</button></div></div>
+
+    <audio id="bg-music" loop><source src="https://srv-store6.gofile.io/download/oc634D/A%20Tutto%20Reality%20%20LIsola%20-%20Sigla%20Completa%20-%20ITA.mp3" type="audio/mpeg"></audio>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBjL5gl8KWR2Amr7p_zX-MSKoSoauAWooM",
+            authDomain: "show-votazione-reality.firebaseapp.com",
+            projectId: "show-votazione-reality",
+            storageBucket: "show-votazione-reality.appspot.com",
+            messagingSenderId: "484419274371",
+            appId: "1:484419274371:web:a9a34b26e028675235fdb6",
+            measurementId: "G-E73X7GV76L"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const castData = [ { name: 'Gumball', img: 'https://i.pinimg.com/736x/af/61/0f/af610f55e819f4bd3f37e5001a2b19ee.jpg' }, { name: 'Darwin', img: 'https://i.pinimg.com/736x/44/ad/5f/44ad5f25f6dae6e19757b15346684583.jpg' }, { name: 'Anais', img: 'https://i.pinimg.com/1200x/26/f8/72/26f8725b4a109e67d385f7f049beb64d.jpg' }, { name: 'Nicole', img: 'https://i.pinimg.com/736x/4e/ac/70/4eac705ff7feba9202c200de511c8583.jpg' }, { name: 'Richard', img: 'https://i.pinimg.com/736x/d5/24/9f/d5249fcdd9dd6a3665bcdccd94a47f6f.jpg' }, { name: 'Perla', img: 'https://i.pinimg.com/1200x/c4/e4/68/c4e468b58c65cac7ab819e34302676a1.jpg' }, { name: 'Steven', img: 'https://i.pinimg.com/736x/1c/3c/83/1c3c83c96596d34adda0c0d9f23d34e8.jpg' }, { name: 'Garnet', img: 'https://i.pinimg.com/736x/47/9e/df/479edf90183bf09eec11ecf34325e0bb.jpg' }, { name: 'Ametista', img: 'https://i.pinimg.com/736x/b1/07/fe/b107fe61d0f329ed7447da0198c8da24.jpg' }, { name: 'Lapis', img: 'https://i.pinimg.com/736x/94/58/a8/9458a8a235f2cbc6a4b5b19758ace36a.jpg' }, { name: 'Stewie', img: 'https://i.pinimg.com/1200x/b9/96/fe/b996fedab3debb67906da29e51525ab5.jpg' }, { name: 'Brian', img: 'https://i.pinimg.com/736x/4b/0d/7c/4b0d7cd213626b371b1493c67654c902.jpg' }, { name: 'Peter', img: 'https://i.pinimg.com/736x/fe/dd/12/fedd122ed1c9c659d15d0c384622dfc6.jpg' }, { name: 'Lois', img: 'https://i.pinimg.com/1200x/65/e2/03/65e203e2ea7ba98ab49dfeeb9adebcaa.jpg' }, { name: 'Lisa', img: 'https://i.pinimg.com/736x/e5/2d/fe/e52dfee5a58f5dad19f9e0592c63a7cd.jpg' }, { name: 'Bart', img: 'https://i.pinimg.com/1200x/cf/dc/86/cfdc8641fb98a49c0e731a8e6c002b02.jpg' }, { name: 'Homer', img: 'https://i.pinimg.com/736x/25/71/8e/25718eb490b2eb301a2854c5dc74e75b.jpg' }, { name: 'Ned', img: 'https://i.pinimg.com/1200x/18/fc/75/18fc75f07fbd6225492a6aca8bf133c5.jpg' }, { name: 'Stan', img: 'https://i.pinimg.com/736x/cc/48/c0/cc48c09c661d4f9af432a37c6b908e41.jpg' }, { name: 'Francine', img: 'https://i.pinimg.com/736x/18/c1/d2/18c1d2489a64b1b4f9cc78318e62da94.jpg' }, { name: 'Hayley', img: 'https://i.pinimg.com/736x/ff/0a/68/ff0a68de85d1bd98e29be7c05860b437.jpg' }, { name: 'Steve', img: 'https://i.pinimg.com/1200x/ad/b3/46/adb3465ea7efcf62537e95496d56a443.jpg' }, { name: 'Roger', img: 'https://i.pinimg.com/736x/32/27/79/322779874c754bcf1c1cc9fdd11252f5.jpg' }, { name: 'Leela', img: 'https://i.pinimg.com/736x/24/d4/80/24d4800deb67dcc14af56453c8c8c902.jpg' }, { name: 'Fry', img: 'https://i.pinimg.com/1200x/9c/df/cb/9cdfcb9b2a3f9653c7614c0ceb5798b5.jpg' }, { name: 'Bender', img: 'https://i.pinimg.com/736x/17/e2/65/17e2654def74fcc7137d202fb48f7c9a.jpg' }, { name: 'Robot Boy', img: 'https://i.pinimg.com/736x/77/78/2a/77782abe9ee9e431be635c6395322a0f.jpg' }, { name: 'Robot Girl', img: 'https://i.pinimg.com/736x/43/f9/7b/43f97b098e608a3e61b65aabf935bf5f.jpg' }, { name: 'Yang', img: 'https://i.pinimg.com/736x/ea/8f/2c/ea8f2c18bf548e4be17ab499aa98acb3.jpg' }, { name: 'Ying', img: 'https://i.pinimg.com/1200x/13/b4/ff/13b4ff2998c7f763004788fd67468e61.jpg' }, { name: 'Po', img: 'https://i.pinimg.com/1200x/e7/d4/62/e7d4628748d9b65e57e552ccf39fa935.jpg' }, { name: 'Tigre', img: 'https://i.pinimg.com/736x/e8/a6/52/e8a652c389c31e0be3232db065c3ce2f.jpg' }, { name: 'Shifu', img: 'https://i.pinimg.com/1200x/32/74/37/3274379162f8c714fa75a2391e56bed8.jpg' }, { name: 'Pucca', img: 'https://i.pinimg.com/736x/4f/c7/16/4fc716c74fd3c36cdf9c774546a94f9d.jpg' }, { name: 'Garu', img: 'https://i.pinimg.com/736x/ee/d6/41/eed6413f9bde5936c76cd8a0a96fcc3a.jpg' }, { name: 'Doraemon', img: 'https://i.pinimg.com/736x/ef/43/fc/ef43fc1923e2904d1007b3b8b7a2e509.jpg' }, { name: 'Nobita', img: 'https://i.pinimg.com/1200x/d4/ee/64/d4ee644406a064665a33d74980744e6f.jpg' }, { name: 'Phineas', img: 'https://i.pinimg.com/736x/01/f8/d9/01f8d9e5651859eab697441a4e7d69c7.jpg' }, { name: 'Ferb', img: 'https://i.pinimg.com/1200x/68/04/c6/6804c62c210eef6288ca1d555db326ef.jpg' }, { name: 'Isabella', img: 'https://i.pinimg.com/1200x/8f/b6/53/8fb6531754417925d60f7ba9276d824d.jpg' }, { name: 'Candace', img: 'https://i.pinimg.com/736x/e3/9d/95/e39d9504c7131e87c662b1f0537c3d7b.jpg' }, { name: 'Perry', img: 'https://i.pinimg.com/736x/6e/a4/33/6ea433e585e73b90d08f32e37b8047a7.jpg' }, { name: 'Stacy', img: 'https://i.pinimg.com/736x/49/5f/a2/495fa207ac08afdb0edd09019e4a06a4.jpg' }, { name: 'Spongebob', img: 'https://i.pinimg.com/736x/cf/8d/06/cf8d06adf1b9d91bacca860aed203dfd.jpg' }, { name: 'Patrick', img: 'https://i.pinimg.com/736x/0c/d7/cf/0cd7cfd63876a6579e68e53e10b4214e.jpg' }, { name: 'Squiddi', img: 'https://i.pinimg.com/736x/50/6d/1c/506d1c34be865276fc5914be49040b54.jpg' }, { name: 'Gary', img: 'https://i.pinimg.com/736x/87/a1/dc/87a1dcba8692affe1b31245d7fcc185a.jpg' }, { name: 'Robin GO', img: 'https://i.pinimg.com/736x/92/b6/50/92b650adbe57c5cec55a3ef46b65e933.jpg' }, { name: 'Robin TT', img: 'https://i.pinimg.com/1200x/3d/6c/68/3d6c6831fbe71721985a26e79f246049.jpg' }, { name: 'Stellarubia GO', img: 'https://i.pinimg.com/736x/5d/fc/47/5dfc47f4c755927482bd87b140d73850.jpg' }, { name: 'Stellarubia TT', img: 'https://i.pinimg.com/1200x/71/8e/9c/718e9ce6ee44358f4c99c2324c647101.jpg' }, { name: 'Corvina GO', img: 'https://i.pinimg.com/736x/a9/17/ed/a917ed4a9d6aadbd08868726c1069990.jpg' }, { name: 'Corvina TT', img: 'https://i.pinimg.com/736x/f4/d1/82/f4d182fd25c3ba3f07ae24b6518aa88b.jpg' }, { name: 'Wasabi', img: 'https://m.media-amazon.com/images/M/MV5BMjFlYzMwNDYtNDRiNS00YWRiLTg3YTAtNWFlNDk1MTZlYTk3XkEyXkFqcGc@._V1_.jpg' }, { name: 'Rekkit', img: 'https://simkl.in/episodes/16/162611351d718a4256_c.jpg' }, { name: 'Cosmo', img: 'https://i.pinimg.com/736x/47/22/99/472299b4c669c052c662df1730403d83.jpg' }, { name: 'Wanda', img: 'https://i.pinimg.com/736x/76/63/2c/76632cdd5765893ba8fbe9de12485dff.jpg' }, { name: 'Vicky', img: 'https://i.pinimg.com/736x/94/8c/a2/948ca2bf95d2536533c916cdce8b9ebc.jpg' }, { name: 'Papà di Timmy', img: 'https://i.pinimg.com/1200x/fe/a5/f3/fea5f385a3fb67dabe02838c2f3720dc.jpg' }, { name: 'Timmy', img: 'https://i.pinimg.com/736x/1d/54/89/1d548928bac7ea94fcad567cf74721ab.jpg' }, { name: 'Finn', img: 'https://i.pinimg.com/736x/8a/f3/a3/8af3a35a8e4397b9c5d81e0f4d42a2b0.jpg' }, { name: 'Jake', img: 'https://i.pinimg.com/736x/00/07/e5/0007e54a9a0d180850ed97718df1e432.jpg' }, { name: 'Gunter', img: 'https://i.pinimg.com/736x/26/96/ed/2696eda8f5c9babb308d1f123724b7c8.jpg' }, { name: 'Gommarosa', img: 'https://i.pinimg.com/736x/27/3e/df/273edf0076e41b90096717b89e04c1aa.jpg' }, { name: 'Marceline', img: 'https://i.pinimg.com/736x/bb/93/5e/bb935e39f2d66248b6e4178227bdb233.jpg' }, { name: 'Peach', img: 'https://i.pinimg.com/736x/e2/0b/46/e20b46677a4ac93d8de0f1877c264f4e.jpg' }, { name: 'Daisy', img: 'https://i.pinimg.com/1200x/fd/1d/4f/fd1d4f2285878621d08f7edacace0219.jpg' }, { name: 'Rosalinda', img: 'https://i.pinimg.com/736x/09/14/f0/0914f029e712e92de9d4f0081a5da032.jpg' }, { name: 'Wario', img: 'https://i.pinimg.com/736x/07/72/16/07721681614a459938a7f85ec450f957.jpg' }, { name: 'Yoshi', img: 'https://i.pinimg.com/1200x/08/ad/ab/08adaba4772c6d9de6b01d4fb6782d66.jpg' }, { name: 'Toadette', img: 'https://i.pinimg.com/1200x/dc/a5/b3/dca5b320572ae5daeb6fc46950c99101.jpg' }, { name: 'Johnny', img: 'https://i.pinimg.com/1200x/fc/a8/42/fca8428053cad044c13c16a941093275.jpg' }, { name: 'Billy', img: 'https://i.pinimg.com/736x/b6/55/a2/b655a2923fd04d20f9cf2520e8724536.jpg' }, { name: 'Mandy', img: 'https://i.pinimg.com/736x/9f/fc/09/9ffc0904acd73935296ce3dce83b66d2.jpg' }, { name: 'Tenebra', img: 'https://i.pinimg.com/736x/98/53/1e/98531e1d92e69384bd34411a21ec0256.jpg' }, { name: 'Carlos', img: 'https://i.pinimg.com/736x/04/bb/63/04bb630cd30a6c91f7792e77cc989394.jpg' }, { name: 'Ada Wong', img: 'https://i.pinimg.com/736x/19/ca/67/19ca678bedd73e74380204b75852e476.jpg' }, { name: 'Aang', img: 'https://i.pinimg.com/736x/21/c6/02/21c60273e7409b871140d5cee2cace5b.jpg' }, { name: 'Katara', img: 'https://i.pinimg.com/736x/f1/56/17/f156175f5f7790ef5e4632ce8086ba4a.jpg' }, { name: 'Zuko', img: 'https://i.pinimg.com/736x/86/b6/f3/86b6f3d6f859ea16d4e0d3d55e8bf3e4.jpg' }, { name: 'Toph', img: 'https://i.pinimg.com/736x/14/8a/3e/148a3efd1a09e4a858a389754afc5880.jpg' }, { name: 'Pikachu', img: 'https://i.pinimg.com/736x/ad/65/b6/ad65b669746561313925ffff392518bc.jpg' }, { name: 'Eevee', img: 'https://i.pinimg.com/1200x/09/52/82/095282d3ad6396e10730dabddceb3da0.jpg' }, { name: 'Ezio', img: 'https://i.pinimg.com/736x/94/3f/42/943f4260b7afd432b7f903772a914ed8.jpg' }, { name: 'Kirby', img: 'https://i.pinimg.com/736x/ba/e6/63/bae6637b3efecfd002f0c1f9605e53be.jpg' }, { name: 'Sonic', img: 'https://i.pinimg.com/736x/80/60/35/8060350ecfa5e867a48bab8f4744deb6.jpg' }, { name: 'Amy', img: 'https://i.pinimg.com/736x/b9/22/82/b9228241a5657f48ef8ea867ca4a4953.jpg' }, { name: 'Blaze', img: 'https://i.pinimg.com/736x/b8/89/61/b889619ef87861b12d6171172cf851a1.jpg' }, { name: 'Lillipup', img: 'https://i.pinimg.com/736x/e8/e2/47/e8e247cafe563d725c799f05a803fa1c.jpg' }, { name: 'Gwen', img: 'https://i.pinimg.com/736x/6d/86/50/6d86501af8e0b9e30b032cbfaad825d6.jpg' }, { name: 'Duncan', img: 'https://i.pinimg.com/1200x/a1/56/b1/a156b1d64b2e5309a8999be12c9a7247.jpg' }, { name: 'Courtney', img: 'https://i.pinimg.com/1200x/0a/c5/52/0ac5521dddf64ab0b5d08e6e36a2c10b.jpg' }, { name: 'Heather', img: 'https://i.pinimg.com/1200x/ef/9d/24/ef9d242224e10a517f925d68ee5833be.jpg' }, { name: 'Lindsay', img: 'https://i.pinimg.com/736x/0f/28/70/0f2870a28e938e0b00a489583f1659d3.jpg' }, { name: 'Alejandro', img: 'https://i.pinimg.com/1200x/e7/86/07/e78607796652e6e6f4b885f077837973.jpg' }, { name: 'Superboy', img: 'https://i.pinimg.com/1200x/34/20/a3/3420a34c3f0a287a8c06d435fcb577b7.jpg' }, { name: 'Ben 10', img: 'https://i.pinimg.com/736x/57/fc/52/57fc521fb6e3078cc118b980769aba8b.jpg' }, { name: 'Kevin', img: 'https://i.pinimg.com/736x/64/fc/a7/64fca772a45a4a332ccf98085f5417be.jpg' }, { name: 'Goku', img: 'https://i.pinimg.com/736x/38/47/f4/3847f4e67f63bc4329e2115b2669adc4.jpg' }, { name: 'Giyu', img: 'https://i.pinimg.com/1200x/46/ba/9b/46ba9b379e5550f14ab4aaa5a38fd80d.jpg' }, { name: 'Shinobu', img: 'https://i.pinimg.com/736x/0b/1d/01/0b1d01c03c7e5a69a92cae9696a528a6.jpg' }, { name: 'Tanjiro', img: 'https://i.pinimg.com/736x/b6/a0/64/b6a064006e8965bdd40128bbc8618a54.jpg' }, { name: 'Zenitsu', img: 'https://i.pinimg.com/736x/7c/67/f6/7c67f662bc3cfb7a82482a5d6e7e2837.jpg' }, { name: 'Hinosuke', img: 'https://i.pinimg.com/736x/21/98/f4/2198f46f5b1853035154873dd1a57950.jpg' }, { name: 'Rias', img: 'https://i.pinimg.com/736x/8d/e5/55/8de555c9e80992d31f7e4edebf190c1a.jpg' },
+        ];
+        
+        // Game State
+        let gameState = {
+            episode: 1,
+            phase: 'CHALLENGE', // CHALLENGE, VOTE, ELIMINATION, COMEBACK, FINALE
+            isMerged: false,
+            teams: [],
+            individualPlayers: [],
+            losingTeamIndex: -1,
+            immuneContestants: [],
+            eliminatedContestants: [],
+            timerInterval: null,
+            comebacksUsed: 0,
+        };
+        let roomConfig = {};
+        let finalCast = [];
+
+        // --- DOM Elements ---
+        const mainMenu = document.getElementById('main-menu');
+        const gameRoom = document.getElementById('game-room');
+        const mainGameScreen = document.getElementById('main-game-screen');
+        const nextStepBtn = document.getElementById('next-step-btn');
+        const episodeTitle = document.getElementById('episode-title');
+        const gameStatusText = document.getElementById('game-status-text');
+        const hostInstructions = document.getElementById('host-instructions');
+        const votingModal = document.getElementById('voting-modal');
+        const comebackVotingModal = document.getElementById('comeback-voting-modal');
+        const ceremonyModal = document.getElementById('elimination-ceremony-modal');
+        const finaleVotingModal = document.getElementById('finale-voting-modal');
+        const winnerModal = document.getElementById('winner-modal');
+        const rankingModal = document.getElementById('ranking-modal');
+
+        // --- Game Logic Functions ---
+
+        function runGameCycle() {
+             // If we are already in the finale, the only action is to vote.
+            if (gameState.phase === 'FINALE') {
+                startFinaleVoting();
+                return;
+            }
+
+            // Check for Finale condition first
+            if (gameState.isMerged && gameState.individualPlayers.length <= 2) {
+                startFinale();
+                return;
+            }
+
+            // Check for Comeback event
+            if (roomConfig.comebackEnabled && gameState.episode === roomConfig.comebackEpisode && gameState.comebacksUsed < roomConfig.comebackCount) {
+                gameState.phase = 'COMEBACK';
+                hostInstructions.textContent = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
+                gameStatusText.textContent = "Una seconda possibilità è all'orizzonte...";
+                return;
+            }
+
+            // Check for merge condition
+            const activeTeams = gameState.teams.filter(team => team.members.length > 0);
+            if (!gameState.isMerged && (gameState.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
+                mergeTeams();
+                return;
+            }
+
+            switch (gameState.phase) {
+                case 'CHALLENGE': runChallenge(); break;
+                case 'VOTE': startVoting(); break;
+                case 'COMEBACK': startComebackVoting(); break;
+            }
+        }
+        
+        function mergeTeams() {
+            gameState.isMerged = true;
+            gameState.phase = 'CHALLENGE';
+            gameState.individualPlayers = [];
+            gameState.teams.forEach(team => { gameState.individualPlayers.push(...team.members); });
+            gameState.teams = [];
+            gameStatusText.textContent = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
+            hostInstructions.textContent = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
+            updateContestantsUI();
+        }
+
+        function runChallenge() {
+            gameState.immuneContestants = [];
+            if (gameState.isMerged) {
+                const winner = gameState.individualPlayers[Math.floor(Math.random() * gameState.individualPlayers.length)];
+                gameState.immuneContestants.push(winner.name);
+                gameStatusText.textContent = `${winner.name} vince la sfida e ottiene l'immunità!`;
+            } else {
+                const activeTeams = gameState.teams.filter(team => team.members.length > 0);
+                const shuffledTeams = [...activeTeams].sort(() => 0.5 - Math.random());
+                const winningTeam = shuffledTeams[0];
+                const losingTeam = shuffledTeams[shuffledTeams.length - 1];
+                gameState.losingTeamIndex = gameState.teams.findIndex(t => t.name === losingTeam.name);
+
+                winningTeam.members.forEach(member => gameState.immuneContestants.push(member.name));
+                activeTeams.forEach(team => {
+                    if (team.name !== winningTeam.name && team.name !== losingTeam.name && team.members.length > 2) {
+                        const randomImmuneMember = team.members[Math.floor(Math.random() * team.members.length)];
+                        gameState.immuneContestants.push(randomImmuneMember.name);
+                    }
+                });
+                gameStatusText.textContent = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
+            }
+            
+            hostInstructions.textContent = "È il momento di votare! Clicca 'Procedi' per aprire la scheda di voto.";
+            updateContestantsUI();
+            gameState.phase = 'VOTE';
+        }
+
+        function startVoting() {
+            let candidates = [];
+            if (gameState.isMerged) {
+                candidates = gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name));
+            } else {
+                const losingTeam = gameState.teams[gameState.losingTeamIndex];
+                candidates = losingTeam.members.filter(member => !gameState.immuneContestants.includes(member.name));
+            }
+
+            const votingContainer = document.getElementById('voting-candidates-container');
+            votingContainer.innerHTML = '';
+
+            // AUTOMATIC ELIMINATION LOGIC
+            if (!gameState.isMerged && candidates.length === 1) {
+                const eliminated = candidates[0];
+                gameStatusText.textContent = `${eliminated.name} è l'ultimo membro della squadra perdente e viene eliminato automaticamente!`;
+                
+                // Update state
+                gameState.teams[gameState.losingTeamIndex].members = [];
+                gameState.eliminatedContestants.push(eliminated);
+
+                setTimeout(() => {
+                    prepareNextEpisode();
+                }, 4000); // Wait 4 seconds before continuing
+                return;
+            }
+
+            if (candidates.length <= 1) {
+                 gameStatusText.textContent = "Non ci sono abbastanza concorrenti per una votazione. Si procede al prossimo episodio.";
+                 prepareNextEpisode();
+                 return;
+            }
+
+            candidates.forEach(candidate => {
+                const card = document.createElement('div');
+                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                card.innerHTML = `<img src="${candidate.img}" alt="${candidate.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${candidate.name}</p>`;
+                card.onclick = () => {
+                    const otherCandidates = candidates.filter(c => c.name !== candidate.name);
+                    const randomVote = otherCandidates[Math.floor(Math.random() * otherCandidates.length)];
+                    const votes = { [candidate.name]: 1, [randomVote.name]: 1 }; 
+                    votingModal.style.display = 'none';
+                    conductElimination(votes);
+                };
+                votingContainer.appendChild(card);
+            });
+
+            votingModal.style.display = 'block';
+            hostInstructions.textContent = "Votazione in corso...";
+        }
+
+        function conductElimination(votes) {
+            let maxVotes = 0;
+            Object.values(votes).forEach(voteCount => { if (voteCount > maxVotes) maxVotes = voteCount; });
+            const eliminationCandidates = Object.keys(votes).filter(name => votes[name] === maxVotes);
+            runEliminationCeremony(eliminationCandidates);
+        }
+
+        async function runEliminationCeremony(eliminationCandidates) {
+            const ceremonyCandidatesContainer = document.getElementById('ceremony-candidates-container');
+            const ceremonyStatus = document.getElementById('ceremony-status');
+            const ceremonyDetails = document.getElementById('ceremony-details');
+            const ceremonyTimer = document.getElementById('ceremony-timer');
+            
+            let atRiskContestants = gameState.isMerged ? gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name)) : gameState.teams[gameState.losingTeamIndex].members.filter(m => !gameState.immuneContestants.includes(m.name));
+            
+            ceremonyCandidatesContainer.innerHTML = '';
+            atRiskContestants.forEach(contestant => {
+                const card = document.createElement('div');
+                card.id = `ceremony-card-${contestant.name.replace(/\s+/g, '-')}`;
+                card.className = 'character-card bg-gray-800 border-gray-600 rounded-lg shadow-lg p-2 text-center w-32';
+                card.innerHTML = `<img src="${contestant.img}" class="w-full h-24 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-white">${contestant.name}</p>`;
+                ceremonyCandidatesContainer.appendChild(card);
+            });
+
+            ceremonyModal.style.display = 'flex';
+            
+            let timeLeft = 60;
+            ceremonyTimer.textContent = timeLeft;
+            gameState.timerInterval = setInterval(() => {
+                timeLeft--;
+                ceremonyTimer.textContent = timeLeft >= 0 ? timeLeft : 0;
+                if (timeLeft <= 0) clearInterval(gameState.timerInterval);
+            }, 1000);
+
+            const safeContestants = atRiskContestants.filter(m => !eliminationCandidates.includes(m.name));
+            for (const safe of [...safeContestants].sort(() => 0.5 - Math.random())) {
+                await new Promise(r => setTimeout(r, 2500));
+                ceremonyStatus.textContent = `${safe.name}...`;
+                ceremonyDetails.textContent = "Sei salvo stasera.";
+                document.getElementById(`ceremony-card-${safe.name.replace(/\s+/g, '-')}`).classList.add('fading-out');
+            }
+
+            await new Promise(r => setTimeout(r, 3000));
+            
+            const finalTwo = atRiskContestants.filter(m => eliminationCandidates.includes(m.name));
+            if (finalTwo.length < 2) { 
+                ceremonyModal.style.display = 'none'; 
+                prepareNextEpisode(); 
+                return; 
+            }
+
+            const eliminatedName = finalTwo[Math.floor(Math.random() * finalTwo.length)].name;
+            const savedName = finalTwo.find(p => p.name !== eliminatedName).name;
+            const announceOrder = [eliminatedName, savedName].sort(() => 0.5 - Math.random());
+            
+            ceremonyStatus.textContent = `L'ultima persona salva è...`;
+            ceremonyDetails.textContent = `...`;
+            await new Promise(r => setTimeout(r, 3000));
+            ceremonyStatus.textContent = `${announceOrder[0]}...`;
+            await new Promise(r => setTimeout(r, 4000));
+
+            if (announceOrder[0] === savedName) {
+                ceremonyDetails.textContent = "SEI SALVO!";
+                document.getElementById(`ceremony-card-${savedName.replace(/\s+/g, '-')}`).classList.add('fading-out');
+                await new Promise(r => setTimeout(r, 1000));
+                ceremonyStatus.textContent = `${eliminatedName}, sei eliminato.`;
+            } else {
+                ceremonyDetails.textContent = "SEI ELIMINATO!";
+                ceremonyStatus.textContent = `${savedName}, questo significa che sei salvo.`;
+            }
+            document.getElementById(`ceremony-card-${eliminatedName.replace(/\s+/g, '-')}`).classList.add('eliminated');
+
+            if(gameState.isMerged) { gameState.individualPlayers = gameState.individualPlayers.filter(p => p.name !== eliminatedName); } 
+            else { gameState.teams[gameState.losingTeamIndex].members = gameState.teams[gameState.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
+            gameState.eliminatedContestants.push(castData.find(c => c.name === eliminatedName));
+
+            await new Promise(r => setTimeout(r, 4000));
+            clearInterval(gameState.timerInterval);
+            ceremonyModal.style.display = 'none';
+            
+            prepareNextEpisode();
+        }
+
+        function startComebackVoting() {
+            const candidates = gameState.eliminatedContestants;
+            if (candidates.length === 0) {
+                gameStatusText.textContent = "Nessun eliminato da far rientrare. Si prosegue.";
+                prepareNextEpisode();
+                return;
+            }
+            
+            const container = document.getElementById('comeback-candidates-container');
+            container.innerHTML = '';
+            let selectedVotes = [];
+
+            candidates.forEach(candidate => {
+                const card = document.createElement('div');
+                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                card.dataset.name = candidate.name;
+                card.innerHTML = `<img src="${candidate.img}" alt="${candidate.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${candidate.name}</p>`;
+                card.onclick = () => {
+                    if (selectedVotes.includes(candidate.name)) {
+                        selectedVotes = selectedVotes.filter(name => name !== candidate.name);
+                        card.classList.remove('selected');
+                    } else if (selectedVotes.length < 2) {
+                        selectedVotes.push(candidate.name);
+                        card.classList.add('selected');
+                    }
+                    document.getElementById('confirm-comeback-vote').disabled = selectedVotes.length !== 2;
+                };
+                container.appendChild(card);
+            });
+            
+            document.getElementById('confirm-comeback-vote').onclick = () => {
+                conductComeback(selectedVotes);
+                comebackVotingModal.style.display = 'none';
+            };
+            comebackVotingModal.style.display = 'block';
+        }
+
+        function conductComeback(hostVotes) {
+            // Simulate other votes
+            const votedPool = [...new Set([...hostVotes, gameState.eliminatedContestants[Math.floor(Math.random() * gameState.eliminatedContestants.length)].name])];
+            const shuffledPool = votedPool.sort(() => 0.5 - Math.random());
+            const returningContestants = shuffledPool.slice(0, roomConfig.comebackCount);
+
+            returningContestants.forEach(name => {
+                const contestant = gameState.eliminatedContestants.find(c => c.name === name);
+                if (contestant) {
+                    // Add back to individual players if merged, otherwise find a team
+                    if(gameState.isMerged) {
+                        gameState.individualPlayers.push(contestant);
+                    } else {
+                        // Add to the smallest team
+                        let smallestTeam = gameState.teams.reduce((prev, curr) => prev.members.length <= curr.members.length ? prev : curr);
+                        smallestTeam.members.push(contestant);
+                    }
+                    gameState.eliminatedContestants = gameState.eliminatedContestants.filter(c => c.name !== name);
+                }
+            });
+
+            gameStatusText.textContent = `${returningContestants.join(' e ')} tornano in gioco!`;
+            gameState.comebacksUsed += returningContestants.length;
+            prepareNextEpisode();
+        }
+
+        function prepareNextEpisode() {
+            gameState.episode++;
+            gameState.phase = 'CHALLENGE';
+            episodeTitle.textContent = `Episodio ${gameState.episode}`;
+            if(!gameStatusText.textContent.includes("tornano in gioco")) gameStatusText.textContent = `Benvenuti al nuovo episodio!`;
+            hostInstructions.textContent = "Pronto per la prossima sfida? Clicca 'Procedi'.";
+            gameState.immuneContestants = [];
+            updateContestantsUI();
+        }
+        
+        function startFinale() {
+            gameState.phase = 'FINALE';
+            episodeTitle.textContent = 'GRAN FINALE';
+            gameStatusText.textContent = `Siamo arrivati alla fine! Chi vincerà tra ${gameState.individualPlayers[0].name} e ${gameState.individualPlayers[1].name}?`;
+            hostInstructions.textContent = "È il momento di votare il vincitore! Clicca 'Procedi'.";
+            updateContestantsUI();
+        }
+
+        function startFinaleVoting() {
+            const finalists = gameState.individualPlayers;
+            const container = document.getElementById('finale-candidates-container');
+            container.innerHTML = '';
+            finalists.forEach(finalist => {
+                const card = document.createElement('div');
+                card.className = 'character-card bg-white rounded-lg shadow-lg p-4 text-center w-48';
+                card.innerHTML = `<img src="${finalist.img}" class="w-full h-40 object-cover rounded-md mx-auto"><p class="mt-2 text-xl font-bold text-gray-800">${finalist.name}</p>`;
+                card.onclick = () => {
+                    conductFinale(finalist.name);
+                    finaleVotingModal.style.display = 'none';
+                };
+                container.appendChild(card);
+            });
+            finaleVotingModal.style.display = 'block';
+        }
+
+        async function conductFinale(hostVote) {
+            const finalists = gameState.individualPlayers;
+            // Simulate a jury vote, host vote breaks a 50/50 tie
+            const winner = Math.random() > 0.5 ? finalists[0] : finalists[1];
+            const loser = finalists.find(p => p.name !== winner.name);
+
+            const winnerCardContainer = document.getElementById('winner-card-container');
+            const winnerAnnouncement = document.getElementById('winner-announcement');
+            
+            winnerAnnouncement.textContent = "E il vincitore è...";
+            winnerCardContainer.innerHTML = ''; // Clear previous
+            
+            finalists.forEach(finalist => {
+                const card = document.createElement('div');
+                card.id = `winner-card-${finalist.name.replace(/\s+/g, '-')}`;
+                card.className = 'character-card bg-white rounded-lg shadow-2xl p-6 text-center w-64 transition-all duration-500';
+                card.innerHTML = `<img src="${finalist.img}" class="w-full h-56 object-cover rounded-md mx-auto"><p class="mt-4 text-4xl font-bold text-gray-900">${finalist.name}</p>`;
+                winnerCardContainer.appendChild(card);
+            });
+            
+            winnerModal.style.display = 'flex';
+
+            await new Promise(r => setTimeout(r, 4000)); // Suspense before reveal
+
+            document.getElementById(`winner-card-${loser.name.replace(/\s+/g, '-')}`).classList.add('eliminated');
+            document.getElementById(`winner-card-${winner.name.replace(/\s+/g, '-')}`).classList.add('immune-aura');
+            winnerAnnouncement.textContent = `IL VINCITORE È ${winner.name.toUpperCase()}!`;
+
+
+            await new Promise(r => setTimeout(r, 5000));
+            winnerModal.style.display = 'none';
+            displayFinalRanking(winner, loser);
+        }
+
+        function displayFinalRanking(winner, loser) {
+            const rankingList = document.getElementById('ranking-list');
+            const fullRanking = [winner, loser, ...gameState.eliminatedContestants.reverse()];
+            rankingList.innerHTML = fullRanking.map((p, i) => `
+                <li class="flex items-center p-2 rounded ${i === 0 ? 'bg-yellow-200 font-bold' : 'bg-gray-100'}">
+                    <span class="text-xl font-bold w-8">${i + 1}.</span>
+                    <img src="${p.img}" class="w-12 h-12 rounded-full object-cover mx-4">
+                    <span class="text-lg">${p.name}</span>
+                </li>
+            `).join('');
+            rankingModal.style.display = 'block';
+            nextStepBtn.disabled = true;
+            hostInstructions.textContent = "La partita è finita!";
+        }
+
+        function updateContestantsUI() {
+            const teamsContainer = document.getElementById('teams-container');
+            teamsContainer.innerHTML = '';
+
+            if (gameState.isMerged) {
+                const container = document.createElement('div');
+                container.className = `team-container p-4 rounded-xl shadow-lg w-full bg-gray-200`;
+                let membersHtml = gameState.individualPlayers.map(member => {
+                    const isImmune = gameState.immuneContestants.includes(member.name);
+                    return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
+                }).join('');
+                container.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">Concorrenti Individuali</h3><div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">${membersHtml}</div>`;
+                teamsContainer.appendChild(container);
+            } else {
+                const teamColors = ['bg-blue-200', 'bg-red-200', 'bg-green-200', 'bg-yellow-200', 'bg-purple-200', 'bg-pink-200'];
+                gameState.teams.forEach((team, index) => {
+                    if (team.members.length === 0) return;
+                    const teamEl = document.createElement('div');
+                    teamEl.className = `team-container p-4 rounded-xl shadow-lg w-full md:w-5/12 ${teamColors[index % teamColors.length]}`;
+                    let membersHtml = team.members.map(member => {
+                        const isImmune = gameState.immuneContestants.includes(member.name);
+                        return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
+                    }).join('');
+                    teamEl.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">${team.name}</h3><div class="grid grid-cols-2 lg:grid-cols-3 gap-3">${membersHtml}</div>`;
+                    teamsContainer.appendChild(teamEl);
+                });
+            }
+        }
+
+        function setupGame() {
+            if (roomConfig.castSelection === 'manual') {
+                finalCast = Array.from(document.querySelectorAll('#cast-container .character-card.selected')).map(card => castData.find(c => c.name === card.dataset.name));
+            } else {
+                finalCast = [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants);
+            }
+
+            const shuffledCast = [...finalCast].sort(() => 0.5 - Math.random());
+            const numTeams = parseInt(roomConfig.numTeams, 10);
+            gameState.teams = Array.from({ length: numTeams }, (_, i) => ({ name: `Squadra ${i + 1}`, members: [] }));
+            shuffledCast.forEach((member, index) => gameState.teams[index % numTeams].members.push(member));
+
+            mainMenu.classList.add('hidden');
+            gameRoom.classList.add('hidden');
+            mainGameScreen.classList.remove('hidden');
+            
+            document.getElementById('judge-list').innerHTML = `<div class="flex items-center space-x-3 p-2 bg-gray-200 rounded-lg"><img src="${document.getElementById('player-image-preview').src}" class="w-10 h-10 rounded-full object-cover"><span class="font-medium text-gray-800">${document.getElementById('nickname').value} (Host)</span></div>`;
+            
+            // Start with episode 1
+            gameState.episode = 0; // It will be incremented to 1 in prepareNextEpisode
+            prepareNextEpisode();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const bgMusic = document.getElementById('bg-music');
+            document.body.addEventListener('click', () => { if (bgMusic.paused) bgMusic.play().catch(e => console.log(e)); }, { once: true });
+
+            const imageUrlModal = document.getElementById('image-url-modal');
+            const openUrlModalBtn = document.getElementById('image-url-btn');
+            openUrlModalBtn.onclick = () => imageUrlModal.style.display = 'block';
+            imageUrlModal.querySelector('.close').onclick = () => imageUrlModal.style.display = 'none';
+            document.getElementById('submit-image-url').onclick = () => {
+                const url = document.getElementById('image-url-input').value.trim();
+                if(url) document.getElementById('player-image-preview').src = url;
+                imageUrlModal.style.display = 'none';
+            };
+            window.addEventListener('click', (event) => { if (event.target == imageUrlModal) imageUrlModal.style.display = 'none'; });
+
+
+            const createRoomModal = document.getElementById('create-room-modal');
+            document.getElementById('create-room-btn').onclick = () => createRoomModal.style.display = 'block';
+            createRoomModal.querySelector('.close').onclick = () => createRoomModal.style.display = 'none';
+            
+            const comebackSelection = document.getElementById('comeback-selection');
+            const comebackOptionsContainer = document.getElementById('comeback-options-container');
+            comebackSelection.onchange = () => { comebackOptionsContainer.classList.toggle('hidden', comebackSelection.value === 'none'); };
+
+            document.getElementById('confirm-create-room').addEventListener('click', async () => {
+                roomConfig = {
+                    numContestants: document.getElementById('num-contestants').value,
+                    numTeams: document.getElementById('num-teams').value,
+                    castSelection: document.getElementById('cast-selection').value,
+                    mergeEpisode: parseInt(document.getElementById('merge-episode').value, 10),
+                    comebackEnabled: document.getElementById('comeback-selection').value === 'enabled',
+                    comebackCount: parseInt(document.getElementById('comeback-count').value, 10),
+                    comebackEpisode: parseInt(document.getElementById('comeback-episode').value, 10),
+                };
+                
+                // --- LOGICA FIREBASE RIATTIVATA ---
+                try {
+                    const docRef = await addDoc(collection(db, "rooms"), roomConfig);
+                    console.log("Stanza creata con ID: ", docRef.id);
+                    
+                    // Mostra il codice della stanza
+                    const roomInfo = document.getElementById('room-info');
+                    roomInfo.innerHTML = `
+                        <p class="text-sm font-medium">Codice Stanza:</p>
+                        <div class="flex items-center justify-center mt-1">
+                            <input id="room-code-display" type="text" value="${docRef.id}" class="text-center font-mono bg-white rounded-l-md p-1 w-full" readonly>
+                            <button id="copy-code-btn" class="bg-blue-500 text-white px-3 py-1 rounded-r-md hover:bg-blue-600">Copia</button>
+                        </div>
+                    `;
+                    document.getElementById('copy-code-btn').onclick = () => {
+                        const codeInput = document.getElementById('room-code-display');
+                        codeInput.select();
+                        document.execCommand('copy');
+                    };
+
+                    // Prosegui al gioco dopo aver creato la stanza
+                    createRoomModal.style.display = 'none';
+                    mainMenu.classList.add('hidden');
+                    gameRoom.classList.remove('hidden');
+                    populateCastGrid();
+                    document.getElementById('player-list').innerHTML = `<div class="flex items-center space-x-3 p-2 bg-gray-200 rounded-lg"><img src="${document.getElementById('player-image-preview').src}" class="w-10 h-10 rounded-full object-cover"><span class="font-medium text-gray-800">${document.getElementById('nickname').value} (Host)</span></div>`;
+
+                } catch (e) {
+                    console.error("Errore nella creazione della stanza: ", e);
+                    alert("Errore nella creazione della stanza. Assicurati di aver inserito le credenziali di Firebase corrette e di aver impostato le regole di sicurezza come da guida.");
+                }
+            });
+
+             const populateCastGrid = () => {
+                const castContainer = document.getElementById('cast-container');
+                castContainer.innerHTML = '';
+                let charactersToShow = (roomConfig.castSelection === 'random') ? [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants) : castData;
+                document.getElementById('cast-title').textContent = (roomConfig.castSelection === 'random') ? "Cast Casuale Selezionato" : "Scegli il Cast";
+                document.getElementById('cast-subtitle').textContent = (roomConfig.castSelection === 'random') ? `Ecco i ${roomConfig.numContestants} concorrenti!` : `Seleziona ${roomConfig.numContestants} concorrenti`;
+
+                charactersToShow.forEach(character => {
+                    const card = document.createElement('div');
+                    card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                    card.dataset.name = character.name;
+                    card.innerHTML = `<img src="${character.img}" alt="${character.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none" onerror="this.src='https://placehold.co/100x128/cccccc/000000?text=N/A'"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${character.name}</p>`;
+                    if (roomConfig.castSelection === 'manual') card.addEventListener('click', () => handleCharacterClick(card));
+                    else card.classList.add('disabled');
+                    castContainer.appendChild(card);
+                });
+                updateStartButton();
+            };
+            const handleCharacterClick = (card) => {
+                const numContestants = parseInt(roomConfig.numContestants, 10);
+                const selectedCount = document.querySelectorAll('#cast-container .character-card.selected').length;
+                if (card.classList.contains('selected')) card.classList.remove('selected');
+                else if (selectedCount < numContestants) card.classList.add('selected');
+                document.getElementById('cast-subtitle').textContent = `Selezionati ${document.querySelectorAll('#cast-container .character-card.selected').length} di ${numContestants}`;
+                updateStartButton();
+            };
+            const updateStartButton = () => {
+                const btn = document.getElementById('start-game-btn');
+                if (roomConfig.castSelection === 'manual') btn.disabled = document.querySelectorAll('#cast-container .character-card.selected').length !== parseInt(roomConfig.numContestants, 10);
+                else btn.disabled = false;
+            };
+            
+            document.getElementById('start-game-btn').addEventListener('click', setupGame);
+            nextStepBtn.addEventListener('click', runGameCycle);
+        });
+    </script>
+</body>
+</html>

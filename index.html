@@ -467,6 +467,7 @@
             const voteSnap = await getDoc(voteDocRef);
             const currentVotes = voteSnap.exists() ? voteSnap.data() : {};
             if (currentVotes[currentUser.uid]) {
+                votingContainer.innerHTML = '';
                 voteSubmittedMsg.classList.remove('hidden');
                 votingModal.style.display = 'flex';
                 return;
@@ -480,6 +481,9 @@
                     await setDoc(voteDocRef, { [currentUser.uid]: candidate.name }, { merge: true });
                     votingContainer.innerHTML = '';
                     voteSubmittedMsg.classList.remove('hidden');
+                    if (isCurrentUserHost) {
+                        votingModal.style.display = 'none';
+                    }
                 };
                 votingContainer.appendChild(card);
             });
@@ -724,7 +728,6 @@
             nextStepBtn.addEventListener('click', async () => {
                 if (!isCurrentUserHost) return;
 
-                // Create a deep copy to avoid mutating the global state before the snapshot arrives
                 const newState = JSON.parse(JSON.stringify(gameState));
                 await runGameLogicForHost(newState);
                 

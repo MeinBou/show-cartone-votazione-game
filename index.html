@@ -339,83 +339,83 @@
             shuffledCast.forEach((member, index) => gameState.teams[index % numTeams].members.push(member));
         }
         
-        function prepareNextEpisode() {
-            gameState.episode++;
-            gameState.phase = 'CHALLENGE';
-            gameState.currentStatusText = `Benvenuti all'episodio ${gameState.episode}!`;
-            gameState.currentHostInstructions = "Pronto per la prossima sfida? Clicca 'Procedi'.";
-            gameState.immuneContestants = [];
-            gameState.tieBreakerCandidates = [];
+        function prepareNextEpisode(state) {
+            state.episode++;
+            state.phase = 'CHALLENGE';
+            state.currentStatusText = `Benvenuti all'episodio ${state.episode}!`;
+            state.currentHostInstructions = "Pronto per la prossima sfida? Clicca 'Procedi'.";
+            state.immuneContestants = [];
+            state.tieBreakerCandidates = [];
         }
         
-        async function runGameCycle() {
-            const currentPhase = gameState.phase;
+        async function runGameCycle(state) {
+            const currentPhase = state.phase;
 
             if (currentPhase === 'VOTE' || currentPhase === 'TIE_VOTE') {
-                await conductElimination();
+                await conductElimination(state);
                 return;
             }
 
             if (currentPhase === 'FINALE') {
-                startFinaleVoting();
+                startFinaleVoting(state);
                 return;
             }
-            if (gameState.isMerged && gameState.individualPlayers.length <= 2) {
-                startFinale();
+            if (state.isMerged && state.individualPlayers.length <= 2) {
+                startFinale(state);
                 return;
             }
-            if (roomConfig.comebackEnabled && gameState.episode === roomConfig.comebackEpisode && gameState.comebacksUsed < roomConfig.comebackCount) {
-                gameState.phase = 'COMEBACK';
-                gameState.currentHostInstructions = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
-                gameState.currentStatusText = "Una seconda possibilità è all'orizzonte...";
+            if (roomConfig.comebackEnabled && state.episode === roomConfig.comebackEpisode && state.comebacksUsed < roomConfig.comebackCount) {
+                state.phase = 'COMEBACK';
+                state.currentHostInstructions = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
+                state.currentStatusText = "Una seconda possibilità è all'orizzonte...";
                 return;
             }
-            const activeTeams = gameState.teams.filter(team => team.members.length > 0);
-            if (!gameState.isMerged && (gameState.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
-                mergeTeams();
+            const activeTeams = state.teams.filter(team => team.members.length > 0);
+            if (!state.isMerged && (state.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
+                mergeTeams(state);
                 return;
             }
             switch (currentPhase) {
-                case 'CHALLENGE': runChallenge(); break;
-                case 'COMEBACK': startComebackVoting(); break;
+                case 'CHALLENGE': runChallenge(state); break;
+                case 'COMEBACK': startComebackVoting(state); break;
             }
         }
         
-        function mergeTeams() {
-            gameState.isMerged = true;
-            gameState.phase = 'CHALLENGE';
-            gameState.individualPlayers = [];
-            gameState.teams.forEach(team => { gameState.individualPlayers.push(...team.members); });
-            gameState.teams = [];
-            gameState.currentStatusText = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
-            gameState.currentHostInstructions = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
+        function mergeTeams(state) {
+            state.isMerged = true;
+            state.phase = 'CHALLENGE';
+            state.individualPlayers = [];
+            state.teams.forEach(team => { state.individualPlayers.push(...team.members); });
+            state.teams = [];
+            state.currentStatusText = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
+            state.currentHostInstructions = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
         }
 
-        function runChallenge() {
-            gameState.immuneContestants = [];
-            if (gameState.isMerged) {
-                const winner = gameState.individualPlayers[Math.floor(Math.random() * gameState.individualPlayers.length)];
-                gameState.immuneContestants.push(winner.name);
-                gameState.currentStatusText = `${winner.name} vince la sfida e ottiene l'immunità!`;
+        function runChallenge(state) {
+            state.immuneContestants = [];
+            if (state.isMerged) {
+                const winner = state.individualPlayers[Math.floor(Math.random() * state.individualPlayers.length)];
+                state.immuneContestants.push(winner.name);
+                state.currentStatusText = `${winner.name} vince la sfida e ottiene l'immunità!`;
             } else {
-                const activeTeams = gameState.teams.filter(team => team.members.length > 0);
+                const activeTeams = state.teams.filter(team => team.members.length > 0);
                 const shuffledTeams = [...activeTeams].sort(() => 0.5 - Math.random());
                 const winningTeam = shuffledTeams[0];
                 const losingTeam = shuffledTeams[shuffledTeams.length - 1];
-                gameState.losingTeamIndex = gameState.teams.findIndex(t => t.name === losingTeam.name);
+                state.losingTeamIndex = state.teams.findIndex(t => t.name === losingTeam.name);
 
-                winningTeam.members.forEach(member => gameState.immuneContestants.push(member.name));
+                winningTeam.members.forEach(member => state.immuneContestants.push(member.name));
                 activeTeams.forEach(team => {
                     if (team.name !== winningTeam.name && team.name !== losingTeam.name && team.members.length > 2) {
                         const randomImmuneMember = team.members[Math.floor(Math.random() * team.members.length)];
-                        gameState.immuneContestants.push(randomImmuneMember.name);
+                        state.immuneContestants.push(randomImmuneMember.name);
                     }
                 });
-                gameState.currentStatusText = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
+                state.currentStatusText = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
             }
             
-            gameState.currentHostInstructions = "Clicca 'Procedi' per iniziare la votazione.";
-            gameState.phase = 'VOTE';
+            state.currentHostInstructions = "Clicca 'Procedi' per iniziare la votazione.";
+            state.phase = 'VOTE';
         }
         
         async function openVotingModal(isTiebreaker = false) {
@@ -469,9 +469,9 @@
             votingModal.style.display = 'flex';
         }
 
-        async function conductElimination() {
-            const isTiebreaker = gameState.phase === 'TIE_VOTE';
-            const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
+        async function conductElimination(state) {
+            const isTiebreaker = state.phase === 'TIE_VOTE';
+            const voteDocumentId = isTiebreaker ? `episode_${state.episode}_tiebreaker` : `episode_${state.episode}`;
             const voteDocRef = doc(db, "rooms", currentRoomId, "votes", voteDocumentId);
             const voteSnap = await getDoc(voteDocRef);
 
@@ -486,7 +486,7 @@
             let candidatesToEliminate = [];
             if (isTiebreaker) {
                 let minVotes = Infinity;
-                gameState.tieBreakerCandidates.forEach(name => {
+                state.tieBreakerCandidates.forEach(name => {
                     const count = voteCounts[name] || 0;
                     if (count < minVotes) {
                         minVotes = count;
@@ -496,58 +496,61 @@
                     }
                 });
                 const eliminatedName = candidatesToEliminate[Math.floor(Math.random() * candidatesToEliminate.length)];
-                await runEliminationCeremony([eliminatedName]);
+                await runEliminationCeremony(state, [eliminatedName]);
             } else {
                 let maxVotes = 0;
-                for (const name in voteCounts) {
-                    if (voteCounts[name] > maxVotes) {
-                        maxVotes = voteCounts[name];
+                let atRiskNames = [];
+                 if (state.isMerged) {
+                    atRiskNames = state.individualPlayers.filter(p => !state.immuneContestants.includes(p.name)).map(p => p.name);
+                } else {
+                    const losingTeam = state.teams[state.losingTeamIndex];
+                    atRiskNames = losingTeam.members.filter(member => !state.immuneContestants.includes(member.name)).map(m => m.name);
+                }
+
+                atRiskNames.forEach(name => {
+                    const count = voteCounts[name] || 0;
+                    if (count > maxVotes) {
+                        maxVotes = count;
                         candidatesToEliminate = [name];
-                    } else if (voteCounts[name] === maxVotes) {
+                    } else if (count === maxVotes) {
                         candidatesToEliminate.push(name);
                     }
-                }
+                });
 
                 if (candidatesToEliminate.length > 1) {
-                    gameState.phase = 'TIE_VOTE';
-                    gameState.tieBreakerCandidates = candidatesToEliminate;
-                    gameState.currentStatusText = `PAREGGIO! Si va alla rivotazione tra: ${candidatesToEliminate.join(', ')}`;
-                    gameState.currentHostInstructions = "Clicca 'Procedi' per avviare la votazione di spareggio.";
+                    state.phase = 'TIE_VOTE';
+                    state.tieBreakerCandidates = candidatesToEliminate;
+                    state.currentStatusText = `PAREGGIO! Si va alla rivotazione tra: ${candidatesToEliminate.join(', ')}`;
+                    state.currentHostInstructions = "Clicca 'Procedi' per avviare la votazione di spareggio.";
                 } else {
-                    await runEliminationCeremony(candidatesToEliminate);
+                    await runEliminationCeremony(state, candidatesToEliminate);
                 }
             }
         }
 
-        async function runEliminationCeremony(eliminationCandidates) {
-            // This function is visual and should be triggered for everyone.
-            // The actual state change happens at the end.
-            gameState.phase = "ELIMINATION"; // Set a phase to prevent re-triggers
-            gameState.currentStatusText = "Cerimonia di Eliminazione in corso...";
-            gameState.currentHostInstructions = "Attendi la fine della cerimonia...";
-            await updateDoc(doc(db, "rooms", currentRoomId), { gameState: gameState });
+        async function runEliminationCeremony(state, eliminationCandidates) {
+            state.phase = "ELIMINATION";
+            state.currentStatusText = "Cerimonia di Eliminazione in corso...";
+            state.currentHostInstructions = "Attendi la fine della cerimonia...";
+            
+            await showEliminationCeremony(state, eliminationCandidates);
 
-            // The onSnapshot listener will trigger the visual part for all clients
-            // For now, we simulate it locally for the host
-            await showEliminationCeremony(eliminationCandidates);
-
-            // After the ceremony, the host updates the state and moves to the next episode
             const eliminatedName = eliminationCandidates[0];
-            if(gameState.isMerged) { gameState.individualPlayers = gameState.individualPlayers.filter(p => p.name !== eliminatedName); } 
-            else { gameState.teams[gameState.losingTeamIndex].members = gameState.teams[gameState.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
+            if(state.isMerged) { state.individualPlayers = state.individualPlayers.filter(p => p.name !== eliminatedName); } 
+            else { state.teams[state.losingTeamIndex].members = state.teams[state.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
             const eliminatedContestant = finalCast.find(c => c.name === eliminatedName);
             if (eliminatedContestant) {
-                gameState.eliminatedContestants.push(eliminatedContestant);
+                state.eliminatedContestants.push(eliminatedContestant);
             }
             
-            prepareNextEpisode();
+            prepareNextEpisode(state);
         }
 
-        async function showEliminationCeremony(eliminationCandidates) {
+        async function showEliminationCeremony(state, eliminationCandidates) {
             const ceremonyCandidatesContainer = document.getElementById('ceremony-candidates-container');
             const ceremonyStatus = document.getElementById('ceremony-status');
             
-            let atRiskContestants = gameState.isMerged ? gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name)) : gameState.teams[gameState.losingTeamIndex].members.filter(m => !gameState.immuneContestants.includes(m.name));
+            let atRiskContestants = state.isMerged ? state.individualPlayers.filter(p => !state.immuneContestants.includes(p.name)) : state.teams[state.losingTeamIndex].members.filter(m => !state.immuneContestants.includes(m.name));
             
             ceremonyCandidatesContainer.innerHTML = '';
             atRiskContestants.forEach(contestant => {
@@ -697,7 +700,7 @@
 
             document.getElementById('start-game-btn').addEventListener('click', async () => {
                 setupGame();
-                prepareNextEpisode();
+                prepareNextEpisode(gameState);
                 
                 const roomRef = doc(db, "rooms", currentRoomId);
                 await updateDoc(roomRef, {
@@ -707,10 +710,13 @@
 
             nextStepBtn.addEventListener('click', async () => {
                 if (!isCurrentUserHost) return;
-                await runGameCycle();
+
+                // Create a deep copy to avoid mutating the global state before the snapshot arrives
+                const newState = JSON.parse(JSON.stringify(gameState));
+                await runGameCycle(newState);
                 
                 const roomRef = doc(db, "rooms", currentRoomId);
-                await updateDoc(roomRef, { gameState: gameState });
+                await updateDoc(roomRef, { gameState: newState });
             });
         });
     </script>

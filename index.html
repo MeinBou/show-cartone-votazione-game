@@ -199,6 +199,7 @@
                 const oldEliminationCandidates = gameState.eliminationCandidates || [];
                 gameState = newGameState;
                 roomConfig = roomData.config;
+                finalCast = gameState.finalCast || []; // Make sure clients get the final cast
 
                 if (isGameStarting) {
                     showScreen('main-game-screen');
@@ -216,7 +217,7 @@
                         voteTracker.classList.remove('hidden');
                         listenForVotes(currentRoomId, voteDocumentId);
                     }
-                } else if (gameState.phase !== 'VOTE' && gameState.phase !== 'TIE_VOTE') {
+                } else if (gameState.phase !== 'VOTE' && gameState.phase !== 'TIE_VOTE' && gameState.phase !== 'ELIMINATION') {
                     votingModal.style.display = 'none';
                     if (votesListenerUnsubscribe) votesListenerUnsubscribe();
                 }
@@ -345,6 +346,7 @@
             const numTeams = parseInt(roomConfig.numTeams, 10);
             
             gameState = {
+                finalCast: finalCast, // <-- Make sure all clients have this
                 episode: 0, phase: 'CHALLENGE', isMerged: false,
                 teams: Array.from({ length: numTeams }, (_, i) => ({ name: `Squadra ${i + 1}`, members: [] })),
                 individualPlayers: [], losingTeamIndex: -1, immuneContestants: [],
@@ -449,7 +451,7 @@
             if (isTiebreaker) {
                 votingTitle.textContent = "Rivotazione - Spareggio!";
                 votingSubtitle.textContent = "VOTA PER SALVARE un concorrente.";
-                candidates = gameState.tieBreakerCandidates.map(name => finalCast.find(c => c.name === name));
+                candidates = gameState.tieBreakerCandidates.map(name => gameState.finalCast.find(c => c.name === name));
             } else {
                 votingTitle.textContent = "Vota per l'eliminazione";
                 votingSubtitle.textContent = "Clicca sul concorrente che vuoi eliminare.";
@@ -580,16 +582,17 @@
 
             ceremonyModal.style.display = 'flex';
             
-            const safeContestants = atRiskContestants.filter(m => !eliminationCandidates.includes(m.name));
+            const eliminatedName = eliminationCandidates[0];
+            const safeContestants = atRiskContestants.filter(m => m.name !== eliminatedName);
+            
             for (const safe of [...safeContestants].sort(() => 0.5 - Math.random())) {
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, 2000));
                 ceremonyStatus.textContent = `${safe.name}... sei salvo.`;
                 document.getElementById(`ceremony-card-${safe.name.replace(/\s+/g, '-')}`).classList.add('fading-out');
             }
 
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 3000));
             
-            const eliminatedName = eliminationCandidates[0];
             ceremonyStatus.textContent = `${eliminatedName}, il tuo viaggio finisce qui.`;
             document.getElementById(`ceremony-card-${eliminatedName.replace(/\s+/g, '-')}`).classList.add('eliminated');
 

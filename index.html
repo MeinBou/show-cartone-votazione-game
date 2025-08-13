@@ -65,7 +65,6 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyBjL5gl8KWR2Amr7p_zX-MSKoSoauAWooM",
             authDomain: "show-votazione-reality.firebaseapp.com",
@@ -80,16 +79,12 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Authenticate user anonymously
         signInAnonymously(auth).catch(error => console.error("Anonymous sign-in failed:", error));
         
         let currentUser = null;
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUser = user;
-                console.log("Utente autenticato:", currentUser.uid);
-            } else {
-                console.log("Nessun utente autenticato.");
             }
         });
 
@@ -212,13 +207,17 @@
                     updateUIFromGameState();
                 }
                 
-                // Open voting modal for all players when phase changes to VOTE or TIE_VOTE
-                if (gameState.phase === 'VOTE' && oldPhase !== 'VOTE') {
-                    openVotingModal(false);
-                } else if (gameState.phase === 'TIE_VOTE' && oldPhase !== 'TIE_VOTE') {
-                    openVotingModal(true);
+                if ((gameState.phase === 'VOTE' && oldPhase !== 'VOTE') || (gameState.phase === 'TIE_VOTE' && oldPhase !== 'TIE_VOTE')) {
+                    const isTiebreaker = gameState.phase === 'TIE_VOTE';
+                    const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
+                    openVotingModal(isTiebreaker);
+                    if (isCurrentUserHost) {
+                        voteTracker.classList.remove('hidden');
+                        listenForVotes(currentRoomId, voteDocumentId);
+                    }
                 } else if (gameState.phase !== 'VOTE' && gameState.phase !== 'TIE_VOTE') {
                     votingModal.style.display = 'none';
+                    if (votesListenerUnsubscribe) votesListenerUnsubscribe();
                 }
              });
         }
@@ -232,14 +231,13 @@
 
                 const votes = docSnap.exists() ? docSnap.data() : {};
                 const voters = Object.keys(votes);
-                const totalVoters = allPlayers.length; // Everyone votes
+                const totalVoters = allPlayers.length;
 
                 voteTrackerList.innerHTML = allPlayers.map(p => {
                     const hasVoted = voters.includes(p.id);
                     return `<span class="mr-2 ${hasVoted ? 'text-green-500' : 'text-red-500'}">${p.nickname}</span>`;
                 }).join('');
                 
-                // Enable next step for host only when all votes are in
                 nextStepBtn.disabled = voters.length < totalVoters;
                 hostInstructions.textContent = voters.length < totalVoters ? `In attesa di ${totalVoters - voters.length} voti...` : "Tutti hanno votato! Clicca 'Procedi' per contare i voti.";
             });
@@ -254,8 +252,8 @@
             if (isCurrentUserHost) {
                 hostPanel.classList.remove('hidden');
                 hostInstructions.textContent = gameState.currentHostInstructions || '';
-                nextStepBtn.disabled = false; // Default to enabled for host
-                voteTracker.classList.add('hidden'); // Hide tracker by default
+                nextStepBtn.disabled = false;
+                voteTracker.classList.add('hidden');
             } else {
                 hostPanel.classList.add('hidden');
             }
@@ -278,7 +276,346 @@
             };
         }
 
-        // --- Setup and Event Listeners ---
+        const populateCastGrid = () => {
+            const castContainer = document.getElementById('cast-container');
+            castContainer.innerHTML = '';
+            let charactersToShow = (roomConfig.castSelection === 'random') ? [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants) : castData;
+            document.getElementById('cast-title').textContent = (roomConfig.castSelection === 'random') ? "Cast Casuale Selezionato" : "Scegli il Cast";
+            document.getElementById('cast-subtitle').textContent = (roomConfig.castSelection === 'random') ? `Ecco i ${roomConfig.numContestants} concorrenti!` : `Seleziona ${roomConfig.numContestants} concorrenti`;
+
+            charactersToShow.forEach(character => {
+                const card = document.createElement('div');
+                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                card.dataset.name = character.name;
+                card.innerHTML = `<img src="${character.img}" alt="${character.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none" onerror="this.src='https://placehold.co/100x128/cccccc/000000?text=N/A'"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${character.name}</p>`;
+                
+                if (roomConfig.castSelection === 'manual' && isCurrentUserHost) {
+                    card.addEventListener('click', () => handleCharacterClick(card));
+                } else {
+                    card.classList.add('disabled');
+                }
+                castContainer.appendChild(card);
+            });
+            updateStartButton();
+        };
+
+        const handleCharacterClick = (card) => {
+            const numContestants = parseInt(roomConfig.numContestants, 10);
+            const selectedCount = document.querySelectorAll('#cast-container .character-card.selected').length;
+            if (card.classList.contains('selected')) card.classList.remove('selected');
+            else if (selectedCount < numContestants) card.classList.add('selected');
+            document.getElementById('cast-subtitle').textContent = `Selezionati ${document.querySelectorAll('#cast-container .character-card.selected').length} di ${numContestants}`;
+            updateStartButton();
+        };
+
+        const updateStartButton = () => {
+            const btn = document.getElementById('start-game-btn');
+            if (!isCurrentUserHost) { btn.disabled = true; return; }
+            if (roomConfig.castSelection === 'manual') {
+                btn.disabled = document.querySelectorAll('#cast-container .character-card.selected').length !== parseInt(roomConfig.numContestants, 10);
+            } else {
+                btn.disabled = false;
+            }
+        };
+        
+        function setupGame() {
+            if (roomConfig.castSelection === 'manual') {
+                finalCast = Array.from(document.querySelectorAll('#cast-container .character-card.selected')).map(card => castData.find(c => c.name === card.dataset.name));
+            } else {
+                finalCast = [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants);
+            }
+            const shuffledCast = [...finalCast].sort(() => 0.5 - Math.random());
+            const numTeams = parseInt(roomConfig.numTeams, 10);
+            
+            gameState = {
+                episode: 0, phase: 'CHALLENGE', isMerged: false,
+                teams: Array.from({ length: numTeams }, (_, i) => ({ name: `Squadra ${i + 1}`, members: [] })),
+                individualPlayers: [], losingTeamIndex: -1, immuneContestants: [],
+                eliminatedContestants: [], comebacksUsed: 0,
+                currentStatusText: '', currentHostInstructions: '',
+                tieBreakerCandidates: []
+            };
+            
+            shuffledCast.forEach((member, index) => gameState.teams[index % numTeams].members.push(member));
+        }
+        
+        function prepareNextEpisode() {
+            gameState.episode++;
+            gameState.phase = 'CHALLENGE';
+            gameState.currentStatusText = `Benvenuti all'episodio ${gameState.episode}!`;
+            gameState.currentHostInstructions = "Pronto per la prossima sfida? Clicca 'Procedi'.";
+            gameState.immuneContestants = [];
+            gameState.tieBreakerCandidates = [];
+        }
+        
+        async function runGameCycle() {
+            const currentPhase = gameState.phase;
+
+            if (currentPhase === 'VOTE' || currentPhase === 'TIE_VOTE') {
+                await conductElimination();
+                return;
+            }
+
+            if (currentPhase === 'FINALE') {
+                startFinaleVoting();
+                return;
+            }
+            if (gameState.isMerged && gameState.individualPlayers.length <= 2) {
+                startFinale();
+                return;
+            }
+            if (roomConfig.comebackEnabled && gameState.episode === roomConfig.comebackEpisode && gameState.comebacksUsed < roomConfig.comebackCount) {
+                gameState.phase = 'COMEBACK';
+                gameState.currentHostInstructions = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
+                gameState.currentStatusText = "Una seconda possibilità è all'orizzonte...";
+                return;
+            }
+            const activeTeams = gameState.teams.filter(team => team.members.length > 0);
+            if (!gameState.isMerged && (gameState.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
+                mergeTeams();
+                return;
+            }
+            switch (currentPhase) {
+                case 'CHALLENGE': runChallenge(); break;
+                case 'COMEBACK': startComebackVoting(); break;
+            }
+        }
+        
+        function mergeTeams() {
+            gameState.isMerged = true;
+            gameState.phase = 'CHALLENGE';
+            gameState.individualPlayers = [];
+            gameState.teams.forEach(team => { gameState.individualPlayers.push(...team.members); });
+            gameState.teams = [];
+            gameState.currentStatusText = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
+            gameState.currentHostInstructions = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
+        }
+
+        function runChallenge() {
+            gameState.immuneContestants = [];
+            if (gameState.isMerged) {
+                const winner = gameState.individualPlayers[Math.floor(Math.random() * gameState.individualPlayers.length)];
+                gameState.immuneContestants.push(winner.name);
+                gameState.currentStatusText = `${winner.name} vince la sfida e ottiene l'immunità!`;
+            } else {
+                const activeTeams = gameState.teams.filter(team => team.members.length > 0);
+                const shuffledTeams = [...activeTeams].sort(() => 0.5 - Math.random());
+                const winningTeam = shuffledTeams[0];
+                const losingTeam = shuffledTeams[shuffledTeams.length - 1];
+                gameState.losingTeamIndex = gameState.teams.findIndex(t => t.name === losingTeam.name);
+
+                winningTeam.members.forEach(member => gameState.immuneContestants.push(member.name));
+                activeTeams.forEach(team => {
+                    if (team.name !== winningTeam.name && team.name !== losingTeam.name && team.members.length > 2) {
+                        const randomImmuneMember = team.members[Math.floor(Math.random() * team.members.length)];
+                        gameState.immuneContestants.push(randomImmuneMember.name);
+                    }
+                });
+                gameState.currentStatusText = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
+            }
+            
+            gameState.currentHostInstructions = "Clicca 'Procedi' per iniziare la votazione.";
+            gameState.phase = 'VOTE';
+        }
+        
+        async function openVotingModal(isTiebreaker = false) {
+            const votingContainer = document.getElementById('voting-candidates-container');
+            const votingTitle = document.getElementById('voting-title');
+            const votingSubtitle = document.getElementById('voting-subtitle');
+            const voteSubmittedMsg = document.getElementById('vote-submitted-msg');
+            
+            votingContainer.innerHTML = '';
+            voteSubmittedMsg.classList.add('hidden');
+
+            let candidates;
+            if (isTiebreaker) {
+                votingTitle.textContent = "Rivotazione - Spareggio!";
+                votingSubtitle.textContent = "VOTA PER SALVARE un concorrente.";
+                candidates = gameState.tieBreakerCandidates.map(name => finalCast.find(c => c.name === name));
+            } else {
+                votingTitle.textContent = "Vota per l'eliminazione";
+                votingSubtitle.textContent = "Clicca sul concorrente che vuoi eliminare.";
+                if (gameState.isMerged) {
+                    candidates = gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name));
+                } else {
+                    const losingTeam = gameState.teams[gameState.losingTeamIndex];
+                    candidates = losingTeam.members.filter(member => !gameState.immuneContestants.includes(member.name));
+                }
+            }
+
+            const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
+            const voteDocRef = doc(db, "rooms", currentRoomId, "votes", voteDocumentId);
+
+            const voteSnap = await getDoc(voteDocRef);
+            const currentVotes = voteSnap.exists() ? voteSnap.data() : {};
+            if (currentVotes[currentUser.uid]) {
+                voteSubmittedMsg.classList.remove('hidden');
+                votingModal.style.display = 'flex';
+                return;
+            }
+
+            candidates.forEach(candidate => {
+                const card = document.createElement('div');
+                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                card.innerHTML = `<img src="${candidate.img}" alt="${candidate.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${candidate.name}</p>`;
+                card.onclick = async () => {
+                    await setDoc(voteDocRef, { [currentUser.uid]: candidate.name }, { merge: true });
+                    votingContainer.innerHTML = '';
+                    voteSubmittedMsg.classList.remove('hidden');
+                };
+                votingContainer.appendChild(card);
+            });
+
+            votingModal.style.display = 'flex';
+        }
+
+        async function conductElimination() {
+            const isTiebreaker = gameState.phase === 'TIE_VOTE';
+            const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
+            const voteDocRef = doc(db, "rooms", currentRoomId, "votes", voteDocumentId);
+            const voteSnap = await getDoc(voteDocRef);
+
+            if (!voteSnap.exists()) { console.error("Documento voti non trovato!"); return; }
+
+            const votes = voteSnap.data();
+            const voteCounts = {};
+            Object.values(votes).forEach(votedFor => {
+                voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
+            });
+
+            let candidatesToEliminate = [];
+            if (isTiebreaker) {
+                let minVotes = Infinity;
+                gameState.tieBreakerCandidates.forEach(name => {
+                    const count = voteCounts[name] || 0;
+                    if (count < minVotes) {
+                        minVotes = count;
+                        candidatesToEliminate = [name];
+                    } else if (count === minVotes) {
+                        candidatesToEliminate.push(name);
+                    }
+                });
+                const eliminatedName = candidatesToEliminate[Math.floor(Math.random() * candidatesToEliminate.length)];
+                await runEliminationCeremony([eliminatedName]);
+            } else {
+                let maxVotes = 0;
+                for (const name in voteCounts) {
+                    if (voteCounts[name] > maxVotes) {
+                        maxVotes = voteCounts[name];
+                        candidatesToEliminate = [name];
+                    } else if (voteCounts[name] === maxVotes) {
+                        candidatesToEliminate.push(name);
+                    }
+                }
+
+                if (candidatesToEliminate.length > 1) {
+                    gameState.phase = 'TIE_VOTE';
+                    gameState.tieBreakerCandidates = candidatesToEliminate;
+                    gameState.currentStatusText = `PAREGGIO! Si va alla rivotazione tra: ${candidatesToEliminate.join(', ')}`;
+                    gameState.currentHostInstructions = "Clicca 'Procedi' per avviare la votazione di spareggio.";
+                } else {
+                    await runEliminationCeremony(candidatesToEliminate);
+                }
+            }
+        }
+
+        async function runEliminationCeremony(eliminationCandidates) {
+            // This function is visual and should be triggered for everyone.
+            // The actual state change happens at the end.
+            gameState.phase = "ELIMINATION"; // Set a phase to prevent re-triggers
+            gameState.currentStatusText = "Cerimonia di Eliminazione in corso...";
+            gameState.currentHostInstructions = "Attendi la fine della cerimonia...";
+            await updateDoc(doc(db, "rooms", currentRoomId), { gameState: gameState });
+
+            // The onSnapshot listener will trigger the visual part for all clients
+            // For now, we simulate it locally for the host
+            await showEliminationCeremony(eliminationCandidates);
+
+            // After the ceremony, the host updates the state and moves to the next episode
+            const eliminatedName = eliminationCandidates[0];
+            if(gameState.isMerged) { gameState.individualPlayers = gameState.individualPlayers.filter(p => p.name !== eliminatedName); } 
+            else { gameState.teams[gameState.losingTeamIndex].members = gameState.teams[gameState.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
+            const eliminatedContestant = finalCast.find(c => c.name === eliminatedName);
+            if (eliminatedContestant) {
+                gameState.eliminatedContestants.push(eliminatedContestant);
+            }
+            
+            prepareNextEpisode();
+        }
+
+        async function showEliminationCeremony(eliminationCandidates) {
+            const ceremonyCandidatesContainer = document.getElementById('ceremony-candidates-container');
+            const ceremonyStatus = document.getElementById('ceremony-status');
+            
+            let atRiskContestants = gameState.isMerged ? gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name)) : gameState.teams[gameState.losingTeamIndex].members.filter(m => !gameState.immuneContestants.includes(m.name));
+            
+            ceremonyCandidatesContainer.innerHTML = '';
+            atRiskContestants.forEach(contestant => {
+                const card = document.createElement('div');
+                card.id = `ceremony-card-${contestant.name.replace(/\s+/g, '-')}`;
+                card.className = 'character-card bg-gray-800 border-gray-600 rounded-lg shadow-lg p-2 text-center w-32';
+                card.innerHTML = `<img src="${contestant.img}" class="w-full h-24 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-white">${contestant.name}</p>`;
+                ceremonyCandidatesContainer.appendChild(card);
+            });
+
+            ceremonyModal.style.display = 'flex';
+            
+            const safeContestants = atRiskContestants.filter(m => !eliminationCandidates.includes(m.name));
+            for (const safe of [...safeContestants].sort(() => 0.5 - Math.random())) {
+                await new Promise(r => setTimeout(r, 1500));
+                ceremonyStatus.textContent = `${safe.name}... sei salvo.`;
+                document.getElementById(`ceremony-card-${safe.name.replace(/\s+/g, '-')}`).classList.add('fading-out');
+            }
+
+            await new Promise(r => setTimeout(r, 2000));
+            
+            const eliminatedName = eliminationCandidates[0];
+            ceremonyStatus.textContent = `${eliminatedName}, il tuo viaggio finisce qui.`;
+            document.getElementById(`ceremony-card-${eliminatedName.replace(/\s+/g, '-')}`).classList.add('eliminated');
+
+            await new Promise(r => setTimeout(r, 4000));
+            ceremonyModal.style.display = 'none';
+        }
+
+        function startComebackVoting() { /* ... */ }
+        async function conductComeback(hostVotes) { /* ... */ }
+        function startFinale() { /* ... */ }
+        function startFinaleVoting() { /* ... */ }
+        async function conductFinale(hostVote) { /* ... */ }
+        function displayFinalRanking(winner, loser) { /* ... */ }
+
+        function updateContestantsUI() {
+            if (!gameState || (!gameState.teams && !gameState.individualPlayers)) return;
+
+            const teamsContainer = document.getElementById('teams-container');
+            teamsContainer.innerHTML = '';
+
+            if (gameState.isMerged) {
+                const container = document.createElement('div');
+                container.className = `team-container p-4 rounded-xl shadow-lg w-full bg-gray-200`;
+                let membersHtml = gameState.individualPlayers.map(member => {
+                    const isImmune = gameState.immuneContestants.includes(member.name);
+                    return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
+                }).join('');
+                container.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">Concorrenti Individuali</h3><div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">${membersHtml}</div>`;
+                teamsContainer.appendChild(container);
+            } else {
+                const teamColors = ['bg-blue-200', 'bg-red-200', 'bg-green-200', 'bg-yellow-200', 'bg-purple-200', 'bg-pink-200'];
+                gameState.teams.forEach((team, index) => {
+                    if (team.members.length === 0) return;
+                    const teamEl = document.createElement('div');
+                    teamEl.className = `team-container p-4 rounded-xl shadow-lg w-full md:w-5/12 ${teamColors[index % teamColors.length]}`;
+                    let membersHtml = team.members.map(member => {
+                        const isImmune = gameState.immuneContestants.includes(member.name);
+                        return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
+                    }).join('');
+                    teamEl.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">${team.name}</h3><div class="grid grid-cols-2 lg:grid-cols-3 gap-3">${membersHtml}</div>`;
+                    teamsContainer.appendChild(teamEl);
+                });
+            }
+        }
+
+        // --- DOM Event Listeners Setup ---
         document.addEventListener('DOMContentLoaded', () => {
             const bgMusic = document.getElementById('bg-music');
             document.body.addEventListener('click', () => { if (bgMusic.paused) bgMusic.play().catch(e => console.log(e)); }, { once: true });
@@ -313,8 +650,6 @@
                 const code = document.getElementById('join-room-code-input').value.trim();
                 if (code) { joinRoom(code); }
             };
-
-            // --- Main Actions ---
 
             document.getElementById('confirm-create-room').addEventListener('click', async () => {
                 if (!currentUser) { alert("Autenticazione in corso, riprova tra un momento."); return; }
@@ -372,352 +707,11 @@
 
             nextStepBtn.addEventListener('click', async () => {
                 if (!isCurrentUserHost) return;
-                runGameCycle();
+                await runGameCycle();
                 
                 const roomRef = doc(db, "rooms", currentRoomId);
                 await updateDoc(roomRef, { gameState: gameState });
             });
-
-            // --- Helper functions ---
-
-            const populateCastGrid = () => {
-                const castContainer = document.getElementById('cast-container');
-                castContainer.innerHTML = '';
-                let charactersToShow = (roomConfig.castSelection === 'random') ? [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants) : castData;
-                document.getElementById('cast-title').textContent = (roomConfig.castSelection === 'random') ? "Cast Casuale Selezionato" : "Scegli il Cast";
-                document.getElementById('cast-subtitle').textContent = (roomConfig.castSelection === 'random') ? `Ecco i ${roomConfig.numContestants} concorrenti!` : `Seleziona ${roomConfig.numContestants} concorrenti`;
-
-                charactersToShow.forEach(character => {
-                    const card = document.createElement('div');
-                    card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
-                    card.dataset.name = character.name;
-                    card.innerHTML = `<img src="${character.img}" alt="${character.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none" onerror="this.src='https://placehold.co/100x128/cccccc/000000?text=N/A'"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${character.name}</p>`;
-                    
-                    if (roomConfig.castSelection === 'manual' && isCurrentUserHost) {
-                        card.addEventListener('click', () => handleCharacterClick(card));
-                    } else {
-                        card.classList.add('disabled');
-                    }
-                    castContainer.appendChild(card);
-                });
-                updateStartButton();
-            };
-
-            const handleCharacterClick = (card) => {
-                const numContestants = parseInt(roomConfig.numContestants, 10);
-                const selectedCount = document.querySelectorAll('#cast-container .character-card.selected').length;
-                if (card.classList.contains('selected')) card.classList.remove('selected');
-                else if (selectedCount < numContestants) card.classList.add('selected');
-                document.getElementById('cast-subtitle').textContent = `Selezionati ${document.querySelectorAll('#cast-container .character-card.selected').length} di ${numContestants}`;
-                updateStartButton();
-            };
-
-            const updateStartButton = () => {
-                const btn = document.getElementById('start-game-btn');
-                if (!isCurrentUserHost) { btn.disabled = true; return; }
-                if (roomConfig.castSelection === 'manual') {
-                    btn.disabled = document.querySelectorAll('#cast-container .character-card.selected').length !== parseInt(roomConfig.numContestants, 10);
-                } else {
-                    btn.disabled = false;
-                }
-            };
-            
-            function setupGame() {
-                if (roomConfig.castSelection === 'manual') {
-                    finalCast = Array.from(document.querySelectorAll('#cast-container .character-card.selected')).map(card => castData.find(c => c.name === card.dataset.name));
-                } else {
-                    finalCast = [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants);
-                }
-                const shuffledCast = [...finalCast].sort(() => 0.5 - Math.random());
-                const numTeams = parseInt(roomConfig.numTeams, 10);
-                
-                gameState = {
-                    episode: 0, phase: 'CHALLENGE', isMerged: false,
-                    teams: Array.from({ length: numTeams }, (_, i) => ({ name: `Squadra ${i + 1}`, members: [] })),
-                    individualPlayers: [], losingTeamIndex: -1, immuneContestants: [],
-                    eliminatedContestants: [], comebacksUsed: 0,
-                    currentStatusText: '', currentHostInstructions: '',
-                    tieBreakerCandidates: []
-                };
-                
-                shuffledCast.forEach((member, index) => gameState.teams[index % numTeams].members.push(member));
-            }
-            
-            // --- Game Logic Functions ---
-            
-            function prepareNextEpisode() {
-                gameState.episode++;
-                gameState.phase = 'CHALLENGE';
-                gameState.currentStatusText = `Benvenuti all'episodio ${gameState.episode}!`;
-                gameState.currentHostInstructions = "Pronto per la prossima sfida? Clicca 'Procedi'.";
-                gameState.immuneContestants = [];
-                gameState.tieBreakerCandidates = [];
-            }
-            
-            async function runGameCycle() {
-                const currentPhase = gameState.phase;
-
-                if (currentPhase === 'VOTE' || currentPhase === 'TIE_VOTE') {
-                    await conductElimination();
-                    return;
-                }
-
-                if (currentPhase === 'FINALE') {
-                    startFinaleVoting();
-                    return;
-                }
-                if (gameState.isMerged && gameState.individualPlayers.length <= 2) {
-                    startFinale();
-                    return;
-                }
-                if (roomConfig.comebackEnabled && gameState.episode === roomConfig.comebackEpisode && gameState.comebacksUsed < roomConfig.comebackCount) {
-                    gameState.phase = 'COMEBACK';
-                    gameState.currentHostInstructions = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
-                    gameState.currentStatusText = "Una seconda possibilità è all'orizzonte...";
-                    return;
-                }
-                const activeTeams = gameState.teams.filter(team => team.members.length > 0);
-                if (!gameState.isMerged && (gameState.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
-                    mergeTeams();
-                    return;
-                }
-                switch (currentPhase) {
-                    case 'CHALLENGE': runChallenge(); break;
-                    case 'COMEBACK': startComebackVoting(); break;
-                }
-            }
-            
-            function mergeTeams() {
-                gameState.isMerged = true;
-                gameState.phase = 'CHALLENGE';
-                gameState.individualPlayers = [];
-                gameState.teams.forEach(team => { gameState.individualPlayers.push(...team.members); });
-                gameState.teams = [];
-                gameState.currentStatusText = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
-                gameState.currentHostInstructions = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
-            }
-
-            function runChallenge() {
-                gameState.immuneContestants = [];
-                if (gameState.isMerged) {
-                    const winner = gameState.individualPlayers[Math.floor(Math.random() * gameState.individualPlayers.length)];
-                    gameState.immuneContestants.push(winner.name);
-                    gameState.currentStatusText = `${winner.name} vince la sfida e ottiene l'immunità!`;
-                } else {
-                    const activeTeams = gameState.teams.filter(team => team.members.length > 0);
-                    const shuffledTeams = [...activeTeams].sort(() => 0.5 - Math.random());
-                    const winningTeam = shuffledTeams[0];
-                    const losingTeam = shuffledTeams[shuffledTeams.length - 1];
-                    gameState.losingTeamIndex = gameState.teams.findIndex(t => t.name === losingTeam.name);
-
-                    winningTeam.members.forEach(member => gameState.immuneContestants.push(member.name));
-                    activeTeams.forEach(team => {
-                        if (team.name !== winningTeam.name && team.name !== losingTeam.name && team.members.length > 2) {
-                            const randomImmuneMember = team.members[Math.floor(Math.random() * team.members.length)];
-                            gameState.immuneContestants.push(randomImmuneMember.name);
-                        }
-                    });
-                    gameState.currentStatusText = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
-                }
-                
-                gameState.currentHostInstructions = "Clicca 'Procedi' per iniziare la votazione.";
-                gameState.phase = 'VOTE';
-            }
-            
-            async function openVotingModal(isTiebreaker = false) {
-                const votingContainer = document.getElementById('voting-candidates-container');
-                const votingTitle = document.getElementById('voting-title');
-                const votingSubtitle = document.getElementById('voting-subtitle');
-                const voteSubmittedMsg = document.getElementById('vote-submitted-msg');
-                
-                votingContainer.innerHTML = '';
-                voteSubmittedMsg.classList.add('hidden');
-
-                let candidates;
-                if (isTiebreaker) {
-                    votingTitle.textContent = "Rivotazione - Spareggio!";
-                    votingSubtitle.textContent = "VOTA PER SALVARE un concorrente.";
-                    candidates = gameState.tieBreakerCandidates.map(name => finalCast.find(c => c.name === name));
-                } else {
-                    votingTitle.textContent = "Vota per l'eliminazione";
-                    votingSubtitle.textContent = "Clicca sul concorrente che vuoi eliminare.";
-                    if (gameState.isMerged) {
-                        candidates = gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name));
-                    } else {
-                        const losingTeam = gameState.teams[gameState.losingTeamIndex];
-                        candidates = losingTeam.members.filter(member => !gameState.immuneContestants.includes(member.name));
-                    }
-                }
-
-                const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
-                const voteDocRef = doc(db, "rooms", currentRoomId, "votes", voteDocumentId);
-
-                // Check if user has already voted
-                const voteSnap = await getDoc(voteDocRef);
-                const currentVotes = voteSnap.exists() ? voteSnap.data() : {};
-                if (currentVotes[currentUser.uid]) {
-                    voteSubmittedMsg.classList.remove('hidden');
-                    votingModal.style.display = 'flex';
-                    return;
-                }
-
-                candidates.forEach(candidate => {
-                    const card = document.createElement('div');
-                    card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
-                    card.innerHTML = `<img src="${candidate.img}" alt="${candidate.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${candidate.name}</p>`;
-                    card.onclick = async () => {
-                        // Submit vote to Firebase
-                        await setDoc(voteDocRef, { [currentUser.uid]: candidate.name }, { merge: true });
-                        votingContainer.innerHTML = '';
-                        voteSubmittedMsg.classList.remove('hidden');
-                    };
-                    votingContainer.appendChild(card);
-                });
-
-                votingModal.style.display = 'flex';
-            }
-
-            async function conductElimination() {
-                const isTiebreaker = gameState.phase === 'TIE_VOTE';
-                const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
-                const voteDocRef = doc(db, "rooms", currentRoomId, "votes", voteDocumentId);
-                const voteSnap = await getDoc(voteDocRef);
-
-                if (!voteSnap.exists()) {
-                    console.error("Documento voti non trovato!");
-                    return;
-                }
-
-                const votes = voteSnap.data();
-                const voteCounts = {};
-                Object.values(votes).forEach(votedFor => {
-                    voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
-                });
-
-                if (isTiebreaker) {
-                    // Reverse logic: find who has the LEAST save votes
-                    let minVotes = Infinity;
-                    let candidatesToEliminate = [];
-                    gameState.tieBreakerCandidates.forEach(name => {
-                        const count = voteCounts[name] || 0;
-                        if (count < minVotes) {
-                            minVotes = count;
-                            candidatesToEliminate = [name];
-                        } else if (count === minVotes) {
-                            candidatesToEliminate.push(name);
-                        }
-                    });
-                    // If there's still a tie, host's original vote (or random) breaks it
-                    const eliminatedName = candidatesToEliminate[Math.floor(Math.random() * candidatesToEliminate.length)];
-                    await runEliminationCeremony([eliminatedName]);
-                } else {
-                    // Normal logic: find who has the MOST elimination votes
-                    let maxVotes = 0;
-                    let candidatesToEliminate = [];
-                    for (const name in voteCounts) {
-                        if (voteCounts[name] > maxVotes) {
-                            maxVotes = voteCounts[name];
-                            candidatesToEliminate = [name];
-                        } else if (voteCounts[name] === maxVotes) {
-                            candidatesToEliminate.push(name);
-                        }
-                    }
-
-                    if (candidatesToEliminate.length > 1) {
-                        // It's a tie!
-                        gameState.phase = 'TIE_VOTE';
-                        gameState.tieBreakerCandidates = candidatesToEliminate;
-                        gameState.currentStatusText = `PAREGGIO! Si va alla rivotazione tra: ${candidatesToEliminate.join(', ')}`;
-                        gameState.currentHostInstructions = "Clicca 'Procedi' per avviare la votazione di spareggio.";
-                    } else {
-                        // No tie, proceed to elimination
-                        await runEliminationCeremony(candidatesToEliminate);
-                    }
-                }
-            }
-
-            async function runEliminationCeremony(eliminationCandidates) {
-                const ceremonyCandidatesContainer = document.getElementById('ceremony-candidates-container');
-                const ceremonyStatus = document.getElementById('ceremony-status');
-                const ceremonyDetails = document.getElementById('ceremony-details');
-                
-                let atRiskContestants = gameState.isMerged ? gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name)) : gameState.teams[gameState.losingTeamIndex].members.filter(m => !gameState.immuneContestants.includes(m.name));
-                
-                ceremonyCandidatesContainer.innerHTML = '';
-                atRiskContestants.forEach(contestant => {
-                    const card = document.createElement('div');
-                    card.id = `ceremony-card-${contestant.name.replace(/\s+/g, '-')}`;
-                    card.className = 'character-card bg-gray-800 border-gray-600 rounded-lg shadow-lg p-2 text-center w-32';
-                    card.innerHTML = `<img src="${contestant.img}" class="w-full h-24 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-white">${contestant.name}</p>`;
-                    ceremonyCandidatesContainer.appendChild(card);
-                });
-
-                ceremonyModal.style.display = 'flex';
-                
-                const safeContestants = atRiskContestants.filter(m => !eliminationCandidates.includes(m.name));
-                for (const safe of [...safeContestants].sort(() => 0.5 - Math.random())) {
-                    await new Promise(r => setTimeout(r, 1500));
-                    ceremonyStatus.textContent = `${safe.name}... sei salvo.`;
-                    document.getElementById(`ceremony-card-${safe.name.replace(/\s+/g, '-')}`).classList.add('fading-out');
-                }
-
-                await new Promise(r => setTimeout(r, 2000));
-                
-                const eliminatedName = eliminationCandidates[0];
-                ceremonyStatus.textContent = `${eliminatedName}, il tuo viaggio finisce qui.`;
-                ceremonyDetails.textContent = "Sei stato eliminato.";
-                document.getElementById(`ceremony-card-${eliminatedName.replace(/\s+/g, '-')}`).classList.add('eliminated');
-
-                if(gameState.isMerged) { gameState.individualPlayers = gameState.individualPlayers.filter(p => p.name !== eliminatedName); } 
-                else { gameState.teams[gameState.losingTeamIndex].members = gameState.teams[gameState.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
-                const eliminatedContestant = finalCast.find(c => c.name === eliminatedName);
-                if (eliminatedContestant) {
-                    gameState.eliminatedContestants.push(eliminatedContestant);
-                }
-
-                await new Promise(r => setTimeout(r, 4000));
-                ceremonyModal.style.display = 'none';
-                
-                prepareNextEpisode();
-            }
-
-            function startComebackVoting() { /* ... unchanged ... */ }
-            async function conductComeback(hostVotes) { /* ... unchanged ... */ }
-            function startFinale() { /* ... unchanged ... */ }
-            function startFinaleVoting() { /* ... unchanged ... */ }
-            async function conductFinale(hostVote) { /* ... unchanged ... */ }
-            function displayFinalRanking(winner, loser) { /* ... unchanged ... */ }
-
-            function updateContestantsUI() {
-                if (!gameState || (!gameState.teams && !gameState.individualPlayers)) return;
-
-                const teamsContainer = document.getElementById('teams-container');
-                teamsContainer.innerHTML = '';
-
-                if (gameState.isMerged) {
-                    const container = document.createElement('div');
-                    container.className = `team-container p-4 rounded-xl shadow-lg w-full bg-gray-200`;
-                    let membersHtml = gameState.individualPlayers.map(member => {
-                        const isImmune = gameState.immuneContestants.includes(member.name);
-                        return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
-                    }).join('');
-                    container.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">Concorrenti Individuali</h3><div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">${membersHtml}</div>`;
-                    teamsContainer.appendChild(container);
-                } else {
-                    const teamColors = ['bg-blue-200', 'bg-red-200', 'bg-green-200', 'bg-yellow-200', 'bg-purple-200', 'bg-pink-200'];
-                    gameState.teams.forEach((team, index) => {
-                        if (team.members.length === 0) return;
-                        const teamEl = document.createElement('div');
-                        teamEl.className = `team-container p-4 rounded-xl shadow-lg w-full md:w-5/12 ${teamColors[index % teamColors.length]}`;
-                        let membersHtml = team.members.map(member => {
-                            const isImmune = gameState.immuneContestants.includes(member.name);
-                            return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
-                        }).join('');
-                        teamEl.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">${team.name}</h3><div class="grid grid-cols-2 lg:grid-cols-3 gap-3">${membersHtml}</div>`;
-                        teamsContainer.appendChild(teamEl);
-                    });
-                }
-            }
         });
     </script>
 </body>

@@ -187,7 +187,7 @@
              const roomRef = doc(db, "rooms", roomId);
              if (roomListenerUnsubscribe) roomListenerUnsubscribe();
 
-             roomListenerUnsubscribe = onSnapshot(roomRef, (docSnap) => {
+             roomListenerUnsubscribe = onSnapshot(roomRef, async (docSnap) => {
                 if (!docSnap.exists()) return;
 
                 const roomData = docSnap.data();
@@ -196,6 +196,7 @@
 
                 const isGameStarting = newGameState.status === 'started' && (!gameState || gameState.status !== 'started');
                 const oldPhase = gameState.phase;
+                const oldEliminationCandidates = gameState.eliminationCandidates || [];
                 gameState = newGameState;
                 roomConfig = roomData.config;
 
@@ -218,6 +219,22 @@
                 } else if (gameState.phase !== 'VOTE' && gameState.phase !== 'TIE_VOTE') {
                     votingModal.style.display = 'none';
                     if (votesListenerUnsubscribe) votesListenerUnsubscribe();
+                }
+
+                if (gameState.phase === 'ELIMINATION' && JSON.stringify(gameState.eliminationCandidates) !== JSON.stringify(oldEliminationCandidates)) {
+                    await showEliminationCeremony(gameState, gameState.eliminationCandidates);
+                    if (isCurrentUserHost) {
+                        const newState = JSON.parse(JSON.stringify(gameState));
+                        const eliminatedName = newState.eliminationCandidates[0];
+                        if(newState.isMerged) { newState.individualPlayers = newState.individualPlayers.filter(p => p.name !== eliminatedName); } 
+                        else { newState.teams[newState.losingTeamIndex].members = newState.teams[newState.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
+                        const eliminatedContestant = finalCast.find(c => c.name === eliminatedName);
+                        if (eliminatedContestant) {
+                            newState.eliminatedContestants.push(eliminatedContestant);
+                        }
+                        prepareNextEpisode(newState);
+                        await updateDoc(doc(db, "rooms", currentRoomId), { gameState: newState });
+                    }
                 }
              });
         }
@@ -333,7 +350,7 @@
                 individualPlayers: [], losingTeamIndex: -1, immuneContestants: [],
                 eliminatedContestants: [], comebacksUsed: 0,
                 currentStatusText: '', currentHostInstructions: '',
-                tieBreakerCandidates: []
+                tieBreakerCandidates: [], eliminationCandidates: []
             };
             
             shuffledCast.forEach((member, index) => gameState.teams[index % numTeams].members.push(member));
@@ -346,9 +363,10 @@
             state.currentHostInstructions = "Pronto per la prossima sfida? Clicca 'Procedi'.";
             state.immuneContestants = [];
             state.tieBreakerCandidates = [];
+            state.eliminationCandidates = [];
         }
         
-        async function runGameCycle(state) {
+        async function runGameLogicForHost(state) {
             const currentPhase = state.phase;
 
             if (currentPhase === 'VOTE' || currentPhase === 'TIE_VOTE') {
@@ -496,7 +514,8 @@
                     }
                 });
                 const eliminatedName = candidatesToEliminate[Math.floor(Math.random() * candidatesToEliminate.length)];
-                await runEliminationCeremony(state, [eliminatedName]);
+                state.phase = 'ELIMINATION';
+                state.eliminationCandidates = [eliminatedName];
             } else {
                 let maxVotes = 0;
                 let atRiskNames = [];
@@ -507,6 +526,11 @@
                     atRiskNames = losingTeam.members.filter(member => !state.immuneContestants.includes(member.name)).map(m => m.name);
                 }
 
+                if (atRiskNames.length === 0) {
+                    prepareNextEpisode(state);
+                    return;
+                }
+
                 atRiskNames.forEach(name => {
                     const count = voteCounts[name] || 0;
                     if (count > maxVotes) {
@@ -515,7 +539,13 @@
                     } else if (count === maxVotes) {
                         candidatesToEliminate.push(name);
                     }
-                });
+                }
+                );
+
+                if (candidatesToEliminate.length === 0) {
+                     candidatesToEliminate.push(atRiskNames[Math.floor(Math.random() * atRiskNames.length)]);
+                }
+
 
                 if (candidatesToEliminate.length > 1) {
                     state.phase = 'TIE_VOTE';
@@ -523,27 +553,10 @@
                     state.currentStatusText = `PAREGGIO! Si va alla rivotazione tra: ${candidatesToEliminate.join(', ')}`;
                     state.currentHostInstructions = "Clicca 'Procedi' per avviare la votazione di spareggio.";
                 } else {
-                    await runEliminationCeremony(state, candidatesToEliminate);
+                    state.phase = 'ELIMINATION';
+                    state.eliminationCandidates = candidatesToEliminate;
                 }
             }
-        }
-
-        async function runEliminationCeremony(state, eliminationCandidates) {
-            state.phase = "ELIMINATION";
-            state.currentStatusText = "Cerimonia di Eliminazione in corso...";
-            state.currentHostInstructions = "Attendi la fine della cerimonia...";
-            
-            await showEliminationCeremony(state, eliminationCandidates);
-
-            const eliminatedName = eliminationCandidates[0];
-            if(state.isMerged) { state.individualPlayers = state.individualPlayers.filter(p => p.name !== eliminatedName); } 
-            else { state.teams[state.losingTeamIndex].members = state.teams[state.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
-            const eliminatedContestant = finalCast.find(c => c.name === eliminatedName);
-            if (eliminatedContestant) {
-                state.eliminatedContestants.push(eliminatedContestant);
-            }
-            
-            prepareNextEpisode(state);
         }
 
         async function showEliminationCeremony(state, eliminationCandidates) {
@@ -713,7 +726,7 @@
 
                 // Create a deep copy to avoid mutating the global state before the snapshot arrives
                 const newState = JSON.parse(JSON.stringify(gameState));
-                await runGameCycle(newState);
+                await runGameLogicForHost(newState);
                 
                 const roomRef = doc(db, "rooms", currentRoomId);
                 await updateDoc(roomRef, { gameState: newState });

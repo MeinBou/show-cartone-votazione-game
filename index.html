@@ -103,8 +103,16 @@
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- CONFIGURAZIONE FIREBASE ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Configurazione del tuo progetto Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBohsS32Y04TgqAHKjyu4EMa2OAz0rGeSE",
+            authDomain: "show-reality-2.firebaseapp.com",
+            projectId: "show-reality-2",
+            storageBucket: "show-reality-2.firebasestorage.app",
+            messagingSenderId: "134926038451",
+            appId: "1:134926038451:web:3945a62cbbb908fa2607c6"
+        };
+        const appId = 'default-app-id'; // Questo può rimanere così
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -155,7 +163,8 @@
                 currentAction: { type: null, message: "" }
             };
             try {
-                const roomCollection = collection(db, "artifacts", appId, "public", "data", "rooms");
+                // Modifica: Usa un percorso di collezione che non include "appId"
+                const roomCollection = collection(db, "rooms");
                 const roomRef = await addDoc(roomCollection, {
                     ...newGameState,
                     createdAt: serverTimestamp()
@@ -177,7 +186,8 @@
                  showCustomAlert("Errore", "ID Stanza non valido.");
                  return;
             }
-            const roomRef = doc(db, "artifacts", appId, "public", "data", "rooms", currentRoomId);
+            // Modifica: Usa un percorso di documento che non include "appId"
+            const roomRef = doc(db, "rooms", currentRoomId);
             try {
                  const roomSnap = await getDoc(roomRef);
                  if (!roomSnap.exists()) {
@@ -214,7 +224,8 @@
         async function updateFirestoreState(newStateObject) {
             if (!currentRoomId) return;
             try {
-                const roomRef = doc(db, "artifacts", appId, "public", "data", "rooms", currentRoomId);
+                // Modifica: Usa un percorso di documento che non include "appId"
+                const roomRef = doc(db, "rooms", currentRoomId);
                 await updateDoc(roomRef, newStateObject);
             } catch (error) {
                 console.error("Errore nell'aggiornamento dello stato: ", error);
@@ -632,11 +643,8 @@
             
             // Autenticazione utente
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // Non usare __initial_auth_token__ per il deploy pubblico
+                await signInAnonymously(auth);
             } catch (error) {
                  console.error("Authentication failed:", error);
                  showCustomAlert("Errore di Autenticazione", "Impossibile connettersi. Ricarica la pagina.");
@@ -736,7 +744,8 @@
             if (customAlertModal) customAlertModal.style.display = 'block';
         }
         async function selectCharacter(charName) {
-            const roomRef = doc(db, "artifacts", appId, "public", "data", "rooms", currentRoomId);
+            // Modifica: Usa un percorso di documento che non include "appId"
+            const roomRef = doc(db, "rooms", currentRoomId);
             await updateDoc(roomRef, {
                 [`humanPlayers.${currentUserId}.characterName`]: charName
             });

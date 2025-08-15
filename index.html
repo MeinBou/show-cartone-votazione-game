@@ -10,20 +10,24 @@
         @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7); } 50% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); } }
         @keyframes fade-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.9); } }
         @keyframes winner-reveal { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes dice-roll-suspense { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
 
         body { font-family: 'Inter', sans-serif; background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png'); background-color: #f0e6d2; overflow-x: hidden; }
-        .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); align-items: center; justify-content: center; }
-        .modal-content { background-color: #fefefe; margin: auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 600px; border-radius: 10px; }
+        .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); }
+        .modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 600px; border-radius: 10px; }
         .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
         .close:hover, .close:focus { color: black; text-decoration: none; }
         .character-card { position: relative; transition: all 0.3s ease; cursor: pointer; border: 3px solid transparent; overflow: hidden; }
-        .character-card.selected { border-color: #10B981; transform: scale(1.05); }
+        .character-card.selected { border-color: #10B981; transform: scale(1.05); box-shadow: 0 0 15px rgba(16, 185, 129, 0.8); }
+        .character-card.player-controlled { border-width: 4px; border-color: #3B82F6; box-shadow: 0 0 10px rgba(59, 130, 246, 0.7); }
+        .character-card.locked { filter: grayscale(80%) brightness(0.7); cursor: not-allowed; }
         .character-card.disabled { cursor: not-allowed; }
         .character-card.immune-aura { animation: pulse 2s infinite; border-color: #FBBF24; }
         .character-card.eliminated { filter: grayscale(100%); background-color: #7f1d1d; transform: scale(0.95); }
         .character-card.fading-out { animation: fade-out 0.5s forwards; }
         .team-container { background-color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(5px); }
         .winner-card { animation: winner-reveal 1s ease-out forwards; }
+        .dice-suspense { animation: dice-roll-suspense 0.1s infinite; }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -32,546 +36,351 @@
     <div id="main-menu" class="min-h-screen flex items-center justify-center">
         <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
             <h1 class="text-3xl font-bold text-center text-gray-800">Isola della Sopravvivenza</h1>
-            <div><label for="nickname" class="block text-sm font-medium text-gray-700">Nickname</label><input type="text" id="nickname" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" value="Giocatore"></div>
+            <div><label for="nickname" class="block text-sm font-medium text-gray-700">Nickname</label><input type="text" id="nickname" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" value="Host"></div>
             <div><label class="block text-sm font-medium text-gray-700">Immagine del Giocatore</label><div class="mt-1 flex items-center space-x-4"><img id="player-image-preview" src="https://placehold.co/80x80/000000/FFFFFF?text=?" class="w-20 h-20 rounded-full object-cover bg-gray-300"><div class="flex flex-col space-y-2"><label for="image-upload" class="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm text-center">Carica File<input type="file" id="image-upload" class="hidden" accept="image/png, image/jpeg"></label><button id="image-url-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm">Usa URL</button></div></div></div>
-            <div class="space-y-4">
-                <button id="create-room-btn" class="w-full px-4 py-3 font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">Crea Stanza</button>
-                <button id="join-code-btn" class="w-full px-4 py-3 font-semibold text-white bg-indigo-500 rounded-md hover:bg-indigo-600">Unisciti tramite Codice</button>
-            </div>
+            <div class="space-y-4"><button id="open-mode-selection-btn" class="w-full px-4 py-3 font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">Crea Stanza</button></div>
         </div>
     </div>
 
-    <!-- Schermata Stanza di Gioco (Lobby) -->
-    <div id="game-room" class="hidden w-full h-screen"><div class="flex h-full"><div class="flex-grow p-4 overflow-auto"><h2 id="cast-title" class="text-3xl font-bold text-center mb-2 text-gray-800">Il Cast</h2><p id="cast-subtitle" class="text-center text-gray-600 mb-6"></p><div id="cast-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"></div></div><div class="w-1/4 min-w-[300px] bg-white bg-opacity-80 rounded-lg shadow-lg p-4 flex flex-col"><div id="room-info" class="mb-4 p-3 bg-gray-200 rounded-lg text-center"></div><h3 class="text-2xl font-bold mb-4 text-gray-800">Giocatori</h3><div id="player-list" class="flex-grow space-y-3 overflow-y-auto"></div><div class="mt-4"><button id="start-game-btn" class="w-full px-4 py-3 font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Inizia Partita</button></div></div></div></div>
+    <!-- Schermata Selezione Personaggio (Modalità Concorrente) -->
+    <div id="character-selection-screen" class="hidden w-full h-screen"><div class="flex h-full"><div class="flex-grow p-4 overflow-auto"><h2 id="char-select-title" class="text-3xl font-bold text-center mb-2 text-gray-800">Scegli il tuo Personaggio</h2><p id="char-select-subtitle" class="text-center text-gray-600 mb-6">Scegli un personaggio da controllare nel gioco.</p><div id="char-select-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"></div></div><div class="w-1/4 min-w-[300px] bg-white bg-opacity-80 rounded-lg shadow-lg p-4 flex flex-col"><h3 class="text-2xl font-bold mb-4 text-gray-800">Giocatori</h3><div id="player-char-list" class="flex-grow space-y-3 overflow-y-auto"></div><div class="mt-4"><button id="start-contestant-game-btn" class="w-full px-4 py-3 font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>Inizia Partita</button></div></div></div></div>
 
     <!-- Schermata di Gioco Principale -->
-    <div id="main-game-screen" class="hidden w-full h-screen"><div class="flex h-full"><div class="flex-grow p-4 overflow-auto"><h2 id="episode-title" class="text-4xl font-bold text-center mb-2 text-gray-800"></h2><p id="game-status-text" class="text-center text-xl text-gray-600 mb-8"></p><div id="teams-container" class="flex flex-wrap justify-center gap-6"></div></div><div class="w-1/4 min-w-[300px] bg-white bg-opacity-80 rounded-lg shadow-lg p-4 flex flex-col"><h3 class="text-2xl font-bold mb-4 text-gray-800">Giocatori Online</h3><div id="judge-list" class="flex-grow space-y-3 overflow-y-auto"></div><div id="host-panel" class="hidden mt-4 border-t pt-4"><h4 id="host-panel-title" class="font-bold text-center text-lg">Pannello Host</h4><p id="host-instructions" class="text-center text-sm text-gray-600 my-2"></p><div id="vote-tracker" class="my-2 hidden"><h5 class="font-semibold text-center">Stato Votazione</h5><div id="vote-tracker-list" class="text-sm text-center"></div></div><button id="next-step-btn" class="w-full px-4 py-3 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Procedi</button></div></div></div></div>
+    <div id="main-game-screen" class="hidden w-full h-screen"><div class="flex h-full">
+        <div id="relationships-hud" class="w-1/4 min-w-[300px] bg-white bg-opacity-80 rounded-lg shadow-lg p-4 flex-col hidden mr-4"><h3 class="text-2xl font-bold mb-4 text-gray-800">Le tue Relazioni</h3><div class="flex-grow space-y-3 overflow-y-auto"><div id="friends-list"></div><div id="allies-list"></div><div id="enemies-list"></div></div></div>
+        <div class="flex-grow p-4 overflow-auto">
+            <h2 id="episode-title" class="text-4xl font-bold text-center mb-2 text-gray-800"></h2>
+            <p id="game-status-text" class="text-center text-xl text-gray-600 mb-8"></p>
+            <div id="teams-container" class="flex flex-wrap justify-center gap-6"></div>
+            <!-- NUOVA POSIZIONE PER LA CLASSIFICA -->
+            <div id="elimination-ranking-container" class="mt-8">
+                <h4 class="text-2xl font-bold mb-4 text-center text-gray-900 drop-shadow-md">Classifica Eliminati</h4>
+                <div id="elimination-ranking-list" class="flex flex-wrap justify-center gap-4 p-4 bg-black bg-opacity-20 rounded-lg">
+                    <!-- Le card degli eliminati verranno inserite qui dal JS -->
+                </div>
+            </div>
+        </div>
+        <!-- Pannello di destra modificato -->
+        <div id="right-panel" class="w-1/4 min-w-[350px] bg-white bg-opacity-80 rounded-lg shadow-lg p-4 flex flex-col">
+            <h3 class="text-2xl font-bold mb-4 text-gray-800">Stato Giocatori</h3>
+            <div id="player-status-container" class="space-y-3"></div>
+            
+            <div class="mt-4 border-t pt-4 flex-grow flex flex-col min-h-0">
+                <h4 class="text-xl font-bold mb-2 text-gray-800">Log Interazioni</h4>
+                <div id="interaction-log" class="flex-grow space-y-2 overflow-y-auto text-xs bg-gray-100 p-2 rounded-lg" style="max-height: 150px;">
+                    <p class="text-gray-500">Nessuna interazione ancora.</p>
+                </div>
+            </div>
+
+            <div class="mt-4 border-t pt-4">
+                <h4 class="font-bold text-center text-lg">Pannello Host</h4>
+                <p id="host-instructions" class="text-center text-sm text-gray-600 my-2"></p>
+                <button id="next-step-btn" class="w-full px-4 py-3 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Procedi</button>
+            </div>
+        </div>
+    </div></div>
 
     <!-- Modali -->
-    <div id="create-room-modal" class="modal"><div class="modal-content"><span class="close">&times;</span><h2 class="text-xl font-semibold mb-4">Configurazione Stanza</h2><div class="space-y-4"><div><label for="num-contestants" class="block text-sm font-medium">Numero Concorrenti (12-40)</label><input type="number" id="num-contestants" min="12" max="40" value="12" class="w-full mt-1 border-gray-300 rounded-md"></div><div><label for="num-teams" class="block text-sm font-medium">Numero Team (2-6)</label><input type="number" id="num-teams" min="2" max="6" value="2" class="w-full mt-1 border-gray-300 rounded-md"></div><div><label for="merge-episode" class="block text-sm font-medium">Episodio del Merge</label><input type="number" id="merge-episode" min="1" value="7" class="w-full mt-1 border-gray-300 rounded-md"></div><div><label class="block text-sm font-medium">Cast</label><select id="cast-selection" class="w-full mt-1 border-gray-300 rounded-md"><option value="random">Randomizza Cast</option><option value="manual">Scegli uno ad uno</option></select></div><div><label class="block text-sm font-medium">Comeback</label><select id="comeback-selection" class="w-full mt-1 border-gray-300 rounded-md"><option value="none">Nessun Comeback</option><option value="enabled">Abilita Comeback</option></select></div><div id="comeback-options-container" class="hidden"><div><label for="comeback-count" class="block text-sm font-medium">Numero di Comeback</label><input type="number" id="comeback-count" min="1" value="1" class="w-full mt-1 border-gray-300 rounded-md"></div><div class="mt-2"><label for="comeback-episode" class="block text-sm font-medium">Episodio del Comeback</label><input type="number" id="comeback-episode" min="1" value="5" class="w-full mt-1 border-gray-300 rounded-md"></div></div><button id="confirm-create-room" class="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600">Crea Stanza</button></div></div></div>
-    <div id="join-room-modal" class="modal"><div class="modal-content"><span class="close">&times;</span><h2 class="text-xl font-semibold mb-4">Unisciti a una Stanza</h2><input type="text" id="join-room-code-input" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Inserisci il codice della stanza"><p id="join-error-msg" class="text-red-500 text-sm mt-2 hidden"></p><button id="confirm-join-room" class="mt-4 w-full px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600">Unisciti</button></div></div>
-    <div id="voting-modal" class="modal"><div class="modal-content"><h2 id="voting-title" class="text-2xl font-bold text-center mb-4">Vota per l'eliminazione</h2><p id="voting-subtitle" class="text-center mb-4">Clicca sul concorrente che vuoi eliminare.</p><div id="voting-candidates-container" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div><p id="vote-submitted-msg" class="text-center text-green-600 font-semibold mt-4 hidden">Voto inviato! In attesa degli altri giocatori...</p></div></div>
-    <div id="comeback-voting-modal" class="modal"><div class="modal-content"><h2 id="comeback-title" class="text-2xl font-bold text-center mb-4">Vota per il Ritorno!</h2><p id="comeback-subtitle" class="text-center mb-4">Scegli 2 concorrenti da far tornare in gioco.</p><div id="comeback-candidates-container" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div><button id="confirm-comeback-vote" class="w-full mt-6 px-4 py-2 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>Conferma Voto</button></div></div>
-    <div id="elimination-ceremony-modal" class="modal bg-black bg-opacity-90"><div class="w-full h-full flex flex-col items-center justify-center text-white p-8"><h2 id="ceremony-status" class="text-5xl font-bold text-yellow-300 drop-shadow-lg mb-4">Cerimonia di Eliminazione</h2><p id="ceremony-details" class="text-2xl mb-8"></p><div id="ceremony-timer" class="text-6xl font-mono mb-8"></div><div id="ceremony-candidates-container" class="flex flex-wrap justify-center gap-6"></div></div></div>
-    <div id="finale-voting-modal" class="modal"><div class="modal-content"><h2 class="text-2xl font-bold text-center mb-4">Voto Finale</h2><p class="text-center mb-4">Chi merita di vincere?</p><div id="finale-candidates-container" class="flex justify-center gap-6"></div></div></div>
-    <div id="winner-modal" class="modal bg-black bg-opacity-90"><div class="w-full h-full flex flex-col items-center justify-center text-white p-8 text-center"><h2 id="winner-announcement" class="text-6xl font-bold drop-shadow-lg mb-8"></h2><div id="winner-card-container" class="flex justify-center gap-8"></div></div></div>
-    <div id="ranking-modal" class="modal"><div class="modal-content"><h2 class="text-3xl font-bold text-center mb-6">Classifica Finale</h2><ol id="ranking-list" class="space-y-3"></ol></div></div>
+    <div id="mode-selection-modal" class="modal"><div class="modal-content text-center"><h2 class="text-2xl font-bold mb-6">Scegli la Modalità di Gioco</h2><div class="flex justify-around"><button id="select-judge-mode" class="px-8 py-4 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600">Modalità Giudice</button><button id="select-contestant-mode" class="px-8 py-4 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600">Modalità Concorrente</button></div></div></div>
+    <div id="create-room-modal" class="modal"><div class="modal-content"><span class="close">&times;</span><h2 class="text-xl font-semibold mb-4">Configurazione Stanza</h2><div class="space-y-4"><div><label for="num-contestants" class="block text-sm font-medium">Numero Concorrenti (12-40)</label><input type="number" id="num-contestants" min="12" max="40" value="12" class="w-full mt-1 border-gray-300 rounded-md"></div><div><label for="num-teams" class="block text-sm font-medium">Numero Team (2-6)</label><input type="number" id="num-teams" min="2" max="6" value="2" class="w-full mt-1 border-gray-300 rounded-md"></div><div id="team-names-container"></div><div><label for="merge-episode" class="block text-sm font-medium">Episodio del Merge</label><input type="number" id="merge-episode" min="1" value="7" class="w-full mt-1 border-gray-300 rounded-md"></div><div id="comeback-config-container"></div><button id="confirm-create-room" class="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600">Conferma e Prosegui</button></div></div></div>
+    <div id="action-phase-modal" class="modal"><div class="modal-content text-center"><h2 class="text-2xl font-bold mb-6">Fase Azione</h2><p class="mb-4">Scegli la tua mossa per questo episodio.</p><div class="flex justify-around"><button id="action-interact" class="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600">Interagisci</button><button id="action-sabotage" class="px-6 py-3 bg-red-500 text-white rounded-md hover:bg-red-600">Sabota</button><button id="action-nothing" class="px-6 py-3 bg-gray-500 text-white rounded-md hover:bg-gray-600">Non fare nulla</button></div></div></div>
+    <div id="interaction-modal" class="modal"><div class="modal-content"><h2 class="text-2xl font-bold text-center mb-4">Interagisci con...</h2><div id="interaction-candidates-container" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div></div></div>
+    <div id="voting-modal" class="modal"><div class="modal-content"><h2 class="text-2xl font-bold text-center mb-4">Vota per l'eliminazione</h2><p class="text-center mb-4">Clicca sul concorrente che vuoi eliminare.</p><div id="voting-candidates-container" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div></div></div>
+    <div id="elimination-ceremony-modal" class="modal bg-black bg-opacity-90"><div class="w-full h-full flex flex-col items-center justify-center text-white p-8 relative"><h2 id="ceremony-status" class="text-5xl font-bold text-yellow-300 drop-shadow-lg mb-4">Cerimonia di Eliminazione</h2><p id="ceremony-details" class="text-2xl mb-8"></p><div id="ceremony-candidates-container" class="flex flex-wrap justify-center gap-6 mb-6"></div><div id="ceremony-votes-readout" class="w-full max-w-lg text-left"></div><button id="skip-ceremony-btn" class="absolute bottom-5 right-5 px-4 py-2 bg-yellow-500 text-black rounded-md hover:bg-yellow-600 font-bold">Salta Cerimonia</button></div></div>
+    <div id="finale-voting-modal" class="modal"><div class="modal-content"><h2 class="text-2xl font-bold text-center mb-4">Voto Finale</h2><p class="text-center mb-4">La giuria sta votando... Chi merita di vincere?</p><div id="finale-candidates-container" class="flex justify-center gap-6"></div></div></div>
+    <div id="winner-modal" class="modal bg-yellow-300 bg-opacity-80"><div class="w-full h-full flex flex-col items-center justify-center text-gray-900 p-8 text-center"><h2 class="text-6xl font-bold drop-shadow-lg mb-4">IL VINCITORE È...</h2><div id="winner-card-container"></div><button id="show-ranking-btn" class="mt-8 px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700">Mostra Classifica Finale</button></div></div>
+    <div id="ranking-modal" class="modal"><div class="modal-content"><h2 class="text-2xl font-bold text-center mb-4">Classifica Finale</h2><ol id="ranking-list" class="list-decimal list-inside space-y-2"></ol></div></div>
     <div id="image-url-modal" class="modal"><div class="modal-content"><span class="close">&times;</span><h2 class="text-xl font-semibold mb-4">Inserisci URL Immagine</h2><input type="text" id="image-url-input" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="https://..."><button id="submit-image-url" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Conferma</button></div></div>
+    <div id="custom-alert-modal" class="modal"><div class="modal-content text-center"><h2 id="custom-alert-title" class="text-xl font-bold mb-4"></h2><p id="custom-alert-message" class="mb-6"></p><button id="custom-alert-close" class="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">OK</button></div></div>
+    <!-- MODALE SPAREGGIO MIGLIORATO -->
+    <div id="tie-breaker-modal" class="modal bg-gray-900 bg-opacity-90"><div class="modal-content bg-gray-800 text-white border-yellow-400 border-2"><h2 class="text-3xl font-bold text-center text-yellow-300 drop-shadow-lg mb-4">SPAREGGIO!</h2><p id="tie-breaker-status" class="text-center mb-6">I seguenti concorrenti hanno pareggiato. Devono sfidarsi al lancio del dado per salvarsi!</p><div id="tie-breaker-players" class="flex justify-center items-start gap-6 mb-6"></div><div id="tie-breaker-controls" class="text-center mt-4"><button id="force-roll-btn" class="px-4 py-2 bg-yellow-500 text-black text-sm rounded-md hover:bg-yellow-600">Forza Lancio CPU (Host)</button></div></div></div>
 
-    <audio id="bg-music" loop><source src="https://srv-store6.gofile.io/download/oc634D/A%20Tutto%20Reality%20%20LIsola%20-%20Sigla%20Completa%20-%20ITA.mp3" type="audio/mpeg"></audio>
+    <audio id="bg-music" loop><source src="http://googleusercontent.com/file_content/0" type="audio/mpeg"></audio>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyBjL5gl8KWR2Amr7p_zX-MSKoSoauAWooM",
-            authDomain: "show-votazione-reality.firebaseapp.com",
-            projectId: "show-votazione-reality",
-            storageBucket: "show-votazione-reality.appspot.com",
-            messagingSenderId: "484419274371",
-            appId: "1:484419274371:web:a9a34b26e028675235fdb6",
-            measurementId: "G-E73X7GV76L"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        signInAnonymously(auth).catch(error => console.error("Anonymous sign-in failed:", error));
-        
-        let currentUser = null;
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-            }
-        });
-
-        const castData = [ { name: 'Gumball', img: 'https://i.pinimg.com/736x/af/61/0f/af610f55e819f4bd3f37e5001a2b19ee.jpg' }, { name: 'Darwin', img: 'https://i.pinimg.com/736x/44/ad/5f/44ad5f25f6dae6e19757b15346684583.jpg' }, { name: 'Anais', img: 'https://i.pinimg.com/1200x/26/f8/72/26f8725b4a109e67d385f7f049beb64d.jpg' }, { name: 'Nicole', img: 'https://i.pinimg.com/736x/4e/ac/70/4eac705ff7feba9202c200de511c8583.jpg' }, { name: 'Richard', img: 'https://i.pinimg.com/736x/d5/24/9f/d5249fcdd9dd6a3665bcdccd94a47f6f.jpg' }, { name: 'Perla', img: 'https://i.pinimg.com/1200x/c4/e4/68/c4e468b58c65cac7ab819e34302676a1.jpg' }, { name: 'Steven', img: 'https://i.pinimg.com/736x/1c/3c/83/1c3c83c96596d34adda0c0d9f23d34e8.jpg' }, { name: 'Garnet', img: 'https://i.pinimg.com/736x/47/9e/df/479edf90183bf09eec11ecf34325e0bb.jpg' }, { name: 'Ametista', img: 'https://i.pinimg.com/736x/b1/07/fe/b107fe61d0f329ed7447da0198c8da24.jpg' }, { name: 'Lapis', img: 'https://i.pinimg.com/736x/94/58/a8/9458a8a235f2cbc6a4b5b19758ace36a.jpg' }, { name: 'Stewie', img: 'https://i.pinimg.com/1200x/b9/96/fe/b996fedab3debb67906da29e51525ab5.jpg' }, { name: 'Brian', img: 'https://i.pinimg.com/736x/4b/0d/7c/4b0d7cd213626b371b1493c67654c902.jpg' }, { name: 'Peter', img: 'https://i.pinimg.com/736x/fe/dd/12/fedd122ed1c9c659d15d0c384622dfc6.jpg' }, { name: 'Lois', img: 'https://i.pinimg.com/1200x/65/e2/03/65e203e2ea7ba98ab49dfeeb9adebcaa.jpg' }, { name: 'Lisa', img: 'https://i.pinimg.com/736x/e5/2d/fe/e52dfee5a58f5dad19f9e0592c63a7cd.jpg' }, { name: 'Bart', img: 'https://i.pinimg.com/1200x/cf/dc/86/cfdc8641fb98a49c0e731a8e6c002b02.jpg' }, { name: 'Homer', img: 'https://i.pinimg.com/736x/25/71/8e/25718eb490b2eb301a2854c5dc74e75b.jpg' }, { name: 'Ned', img: 'https://i.pinimg.com/1200x/18/fc/75/18fc75f07fbd6225492a6aca8bf133c5.jpg' }, { name: 'Stan', img: 'https://i.pinimg.com/736x/cc/48/c0/cc48c09c661d4f9af432a37c6b908e41.jpg' }, { name: 'Francine', img: 'https://i.pinimg.com/736x/18/c1/d2/18c1d2489a64b1b4f9cc78318e62da94.jpg' }, { name: 'Hayley', img: 'https://i.pinimg.com/736x/ff/0a/68/ff0a68de85d1bd98e29be7c05860b437.jpg' }, { name: 'Steve', img: 'https://i.pinimg.com/1200x/ad/b3/46/adb3465ea7efcf62537e95496d56a443.jpg' }, { name: 'Roger', img: 'https://i.pinimg.com/736x/32/27/79/322779874c754bcf1c1cc9fdd11252f5.jpg' }, { name: 'Leela', img: 'https://i.pinimg.com/736x/24/d4/80/24d4800deb67dcc14af56453c8c8c902.jpg' }, { name: 'Fry', img: 'https://i.pinimg.com/1200x/9c/df/cb/9cdfcb9b2a3f9653c7614c0ceb5798b5.jpg' }, { name: 'Bender', img: 'https://i.pinimg.com/736x/17/e2/65/17e2654def74fcc7137d202fb48f7c9a.jpg' }, { name: 'Robot Boy', img: 'https://i.pinimg.com/736x/77/78/2a/77782abe9ee9e431be635c6395322a0f.jpg' }, { name: 'Robot Girl', img: 'https://i.pinimg.com/736x/43/f9/7b/43f97b098e608a3e61b65aabf935bf5f.jpg' }, { name: 'Yang', img: 'https://i.pinimg.com/736x/ea/8f/2c/ea8f2c18bf548e4be17ab499aa98acb3.jpg' }, { name: 'Ying', img: 'https://i.pinimg.com/1200x/13/b4/ff/13b4ff2998c7f763004788fd67468e61.jpg' }, { name: 'Po', img: 'https://i.pinimg.com/1200x/e7/d4/62/e7d4628748d9b65e57e552ccf39fa935.jpg' }, { name: 'Tigre', img: 'https://i.pinimg.com/736x/e8/a6/52/e8a652c389c31e0be3232db065c3ce2f.jpg' }, { name: 'Shifu', img: 'https://i.pinimg.com/1200x/32/74/37/3274379162f8c714fa75a2391e56bed8.jpg' }, { name: 'Pucca', img: 'https://i.pinimg.com/736x/4f/c7/16/4fc716c74fd3c36cdf9c774546a94f9d.jpg' }, { name: 'Garu', img: 'https://i.pinimg.com/736x/ee/d6/41/eed6413f9bde5936c76cd8a0a96fcc3a.jpg' }, { name: 'Doraemon', img: 'https://i.pinimg.com/736x/ef/43/fc/ef43fc1923e2904d1007b3b8b7a2e509.jpg' }, { name: 'Nobita', img: 'https://i.pinimg.com/1200x/d4/ee/64/d4ee644406a064665a33d74980744e6f.jpg' }, { name: 'Phineas', img: 'https://i.pinimg.com/736x/01/f8/d9/01f8d9e5651859eab697441a4e7d69c7.jpg' }, { name: 'Ferb', img: 'https://i.pinimg.com/1200x/68/04/c6/6804c62c210eef6288ca1d555db326ef.jpg' }, { name: 'Isabella', img: 'https://i.pinimg.com/1200x/8f/b6/53/8fb6531754417925d60f7ba9276d824d.jpg' }, { name: 'Candace', img: 'https://i.pinimg.com/736x/e3/9d/95/e39d9504c7131e87c662b1f0537c3d7b.jpg' }, { name: 'Perry', img: 'https://i.pinimg.com/736x/6e/a4/33/6ea433e585e73b90d08f32e37b8047a7.jpg' }, { name: 'Stacy', img: 'https://i.pinimg.com/736x/49/5f/a2/495fa207ac08afdb0edd09019e4a06a4.jpg' }, { name: 'Spongebob', img: 'https://i.pinimg.com/736x/cf/8d/06/cf8d06adf1b9d91bacca860aed203dfd.jpg' }, { name: 'Patrick', img: 'https://i.pinimg.com/736x/0c/d7/cf/0cd7cfd63876a6579e68e53e10b4214e.jpg' }, { name: 'Squiddi', img: 'https://i.pinimg.com/736x/50/6d/1c/506d1c34be865276fc5914be49040b54.jpg' }, { name: 'Gary', img: 'https://i.pinimg.com/736x/87/a1/dc/87a1dcba8692affe1b31245d7fcc185a.jpg' }, { name: 'Robin GO', img: 'https://i.pinimg.com/736x/92/b6/50/92b650adbe57c5cec55a3ef46b65e933.jpg' }, { name: 'Robin TT', img: 'https://i.pinimg.com/1200x/3d/6c/68/3d6c6831fbe71721985a26e79f246049.jpg' }, { name: 'Stellarubia GO', img: 'https://i.pinimg.com/736x/5d/fc/47/5dfc47f4c755927482bd87b140d73850.jpg' }, { name: 'Stellarubia TT', img: 'https://i.pinimg.com/1200x/71/8e/9c/718e9ce6ee44358f4c99c2324c647101.jpg' }, { name: 'Corvina GO', img: 'https://i.pinimg.com/736x/a9/17/ed/a917ed4a9d6aadbd08868726c1069990.jpg' }, { name: 'Corvina TT', img: 'https://i.pinimg.com/736x/f4/d1/82/f4d182fd25c3ba3f07ae24b6518aa88b.jpg' }, { name: 'Wasabi', img: 'https://m.media-amazon.com/images/M/MV5BMjFlYzMwNDYtNDRiNS00YWRiLTg3YTAtNWFlNDk1MTZlYTk3XkEyXkFqcGc@._V1_.jpg' }, { name: 'Rekkit', img: 'https://simkl.in/episodes/16/162611351d718a4256_c.jpg' }, { name: 'Cosmo', img: 'https://i.pinimg.com/736x/47/22/99/472299b4c669c052c662df1730403d83.jpg' }, { name: 'Wanda', img: 'https://i.pinimg.com/736x/76/63/2c/76632cdd5765893ba8fbe9de12485dff.jpg' }, { name: 'Vicky', img: 'https://i.pinimg.com/736x/94/8c/a2/948ca2bf95d2536533c916cdce8b9ebc.jpg' }, { name: 'Papà di Timmy', img: 'https://i.pinimg.com/1200x/fe/a5/f3/fea5f385a3fb67dabe02838c2f3720dc.jpg' }, { name: 'Timmy', img: 'https://i.pinimg.com/736x/1d/54/89/1d548928bac7ea94fcad567cf74721ab.jpg' }, { name: 'Finn', img: 'https://i.pinimg.com/736x/8a/f3/a3/8af3a35a8e4397b9c5d81e0f4d42a2b0.jpg' }, { name: 'Jake', img: 'https://i.pinimg.com/736x/00/07/e5/0007e54a9a0d180850ed97718df1e432.jpg' }, { name: 'Gunter', img: 'https://i.pinimg.com/736x/26/96/ed/2696eda8f5c9babb308d1f123724b7c8.jpg' }, { name: 'Gommarosa', img: 'https://i.pinimg.com/736x/27/3e/df/273edf0076e41b90096717b89e04c1aa.jpg' }, { name: 'Marceline', img: 'https://i.pinimg.com/736x/bb/93/5e/bb935e39f2d66248b6e4178227bdb233.jpg' }, { name: 'Peach', img: 'https://i.pinimg.com/736x/e2/0b/46/e20b46677a4ac93d8de0f1877c264f4e.jpg' }, { name: 'Daisy', img: 'https://i.pinimg.com/1200x/fd/1d/4f/fd1d4f2285878621d08f7edacace0219.jpg' }, { name: 'Rosalinda', img: 'https://i.pinimg.com/736x/09/14/f0/0914f029e712e92de9d4f0081a5da032.jpg' }, { name: 'Wario', img: 'https://i.pinimg.com/736x/07/72/16/07721681614a459938a7f85ec450f957.jpg' }, { name: 'Yoshi', img: 'https://i.pinimg.com/1200x/08/ad/ab/08adaba4772c6d9de6b01d4fb6782d66.jpg' }, { name: 'Toadette', img: 'https://i.pinimg.com/1200x/dc/a5/b3/dca5b320572ae5daeb6fc46950c99101.jpg' }, { name: 'Johnny', img: 'https://i.pinimg.com/1200x/fc/a8/42/fca8428053cad044c13c16a941093275.jpg' }, { name: 'Billy', img: 'https://i.pinimg.com/736x/b6/55/a2/b655a2923fd04d20f9cf2520e8724536.jpg' }, { name: 'Mandy', img: 'https://i.pinimg.com/736x/9f/fc/09/9ffc0904acd73935296ce3dce83b66d2.jpg' }, { name: 'Tenebra', img: 'https://i.pinimg.com/736x/98/53/1e/98531e1d92e69384bd34411a21ec0256.jpg' }, { name: 'Carlos', img: 'https://i.pinimg.com/736x/04/bb/63/04bb630cd30a6c91f7792e77cc989394.jpg' }, { name: 'Ada Wong', img: 'https://i.pinimg.com/736x/19/ca/67/19ca678bedd73e74380204b75852e476.jpg' }, { name: 'Aang', img: 'https://i.pinimg.com/736x/21/c6/02/21c60273e7409b871140d5cee2cace5b.jpg' }, { name: 'Katara', img: 'https://i.pinimg.com/736x/f1/56/17/f156175f5f7790ef5e4632ce8086ba4a.jpg' }, { name: 'Zuko', img: 'https://i.pinimg.com/736x/86/b6/f3/86b6f3d6f859ea16d4e0d3d55e8bf3e4.jpg' }, { name: 'Toph', img: 'https://i.pinimg.com/736x/14/8a/3e/148a3efd1a09e4a858a389754afc5880.jpg' }, { name: 'Pikachu', img: 'https://i.pinimg.com/736x/ad/65/b6/ad65b669746561313925ffff392518bc.jpg' }, { name: 'Eevee', img: 'https://i.pinimg.com/1200x/09/52/82/095282d3ad6396e10730dabddceb3da0.jpg' }, { name: 'Ezio', img: 'https://i.pinimg.com/736x/94/3f/42/943f4260b7afd432b7f903772a914ed8.jpg' }, { name: 'Kirby', img: 'https://i.pinimg.com/736x/ba/e6/63/bae6637b3efecfd002f0c1f9605e53be.jpg' }, { name: 'Sonic', img: 'https://i.pinimg.com/736x/80/60/35/8060350ecfa5e867a48bab8f4744deb6.jpg' }, { name: 'Amy', img: 'https://i.pinimg.com/736x/b9/22/82/b9228241a5657f48ef8ea867ca4a4953.jpg' }, { name: 'Blaze', img: 'https://i.pinimg.com/736x/b8/89/61/b889619ef87861b12d6171172cf851a1.jpg' }, { name: 'Lillipup', img: 'https://i.pinimg.com/736x/e8/e2/47/e8e247cafe563d725c799f05a803fa1c.jpg' }, { name: 'Gwen', img: 'https://i.pinimg.com/736x/6d/86/50/6d86501af8e0b9e30b032cbfaad825d6.jpg' }, { name: 'Duncan', img: 'https://i.pinimg.com/1200x/a1/56/b1/a156b1d64b2e5309a8999be12c9a7247.jpg' }, { name: 'Courtney', img: 'https://i.pinimg.com/1200x/0a/c5/52/0ac5521dddf64ab0b5d08e6e36a2c10b.jpg' }, { name: 'Heather', img: 'https://i.pinimg.com/1200x/ef/9d/24/ef9d242224e10a517f925d68ee5833be.jpg' }, { name: 'Lindsay', img: 'https://i.pinimg.com/736x/0f/28/70/0f2870a28e938e0b00a489583f1659d3.jpg' }, { name: 'Alejandro', img: 'https://i.pinimg.com/1200x/e7/86/07/e78607796652e6e6f4b885f077837973.jpg' }, { name: 'Superboy', img: 'https://i.pinimg.com/1200x/34/20/a3/3420a34c3f0a287a8c06d435fcb577b7.jpg' }, { name: 'Ben 10', img: 'https://i.pinimg.com/736x/57/fc/52/57fc521fb6e3078cc118b980769aba8b.jpg' }, { name: 'Kevin', img: 'https://i.pinimg.com/736x/64/fc/a7/64fca772a45a4a332ccf98085f5417be.jpg' }, { name: 'Goku', img: 'https://i.pinimg.com/736x/38/47/f4/3847f4e67f63bc4329e2115b2669adc4.jpg' }, { name: 'Giyu', img: 'https://i.pinimg.com/1200x/46/ba/9b/46ba9b379e5550f14ab4aaa5a38fd80d.jpg' }, { name: 'Shinobu', img: 'https://i.pinimg.com/736x/0b/1d/01/0b1d01c03c7e5a69a92cae9696a528a6.jpg' }, { name: 'Tanjiro', img: 'https://i.pinimg.com/736x/b6/a0/64/b6a064006e8965bdd40128bbc8618a54.jpg' }, { name: 'Zenitsu', img: 'https://i.pinimg.com/736x/7c/67/f6/7c67f662bc3cfb7a82482a5d6e7e2837.jpg' }, { name: 'Hinosuke', img: 'https://i.pinimg.com/736x/21/98/f4/2198f46f5b1853035154873dd1a57950.jpg' }, { name: 'Rias', img: 'https://i.pinimg.com/736x/8d/e5/55/8de555c9e80992d31f7e4edebf190c1a.jpg' },
+        const castData = [ { name: 'Gumball', img: 'https://i.pinimg.com/736x/af/61/0f/af610f55e819f4bd3f37e5001a2b19ee.jpg' }, { name: 'Darwin', img: 'https://i.pinimg.com/736x/44/ad/5f/44ad5f25f6dae6e19757b15346684583.jpg' }, { name: 'Anais', img: 'https://i.pinimg.com/1200x/26/f8/72/26f8725b4a109e67d385f7f049beb64d.jpg' }, { name: 'Nicole', img: 'https://i.pinimg.com/736x/4e/ac/70/4eac705ff7feba9202c200de511c8583.jpg' }, { name: 'Richard', img: 'https://i.pinimg.com/736x/d5/24/9f/d5249fcdd9dd6a3665bcdccd94a47f6f.jpg' }, { name: 'Perla', img: 'https://i.pinimg.com/1200x/c4/e4/68/c4e468b58c65cac7ab819e34302676a1.jpg' }, { name: 'Steven', img: 'https://i.pinimg.com/736x/1c/3c/83/1c3c83c96596d34adda0c0d9f23d34e8.jpg' }, { name: 'Garnet', img: 'https://i.pinimg.com/736x/47/9e/df/479edf90183bf09eec11ecf34325e0bb.jpg' }, { name: 'Ametista', img: 'https://i.pinimg.com/736x/b1/07/fe/b107fe61d0f329ed7447da0198c8da24.jpg' }, { name: 'Lapis', img: 'https://i.pinimg.com/736x/94/58/a8/9458a8a235f2cbc6a4b5b19758ace36a.jpg' }, { name: 'Stewie', img: 'https://i.pinimg.com/1200x/b9/96/fe/b996fedab3debb67906da29e51525ab5.jpg' }, { name: 'Brian', img: 'https://i.pinimg.com/736x/4b/0d/7c/4b0d7cd213626b371b1493c67654c902.jpg' }, { name: 'Peter', img: 'https://i.pinimg.com/736x/9e-40/74/9e-40-74bbe7890cd245b51b9ff5c0e33c.jpg' }, { name: 'Lois', img: 'https://i.pinimg.com/1200x/65/e2/03/65e203e2ea7ba98ab49dfeeb9adebcaa.jpg' }, { name: 'Lisa', img: 'https://i.pinimg.com/736x/e5/2d/fe/e52dfee5a58f5dad19f9e0592c63a7cd.jpg' }, { name: 'Bart', img: 'https://i.pinimg.com/1200x/cf/dc/86/cfdc8641fb98a49c0e731a8e6c002b02.jpg' }, { name: 'Homer', img: 'https://i.pinimg.com/736x/25/71/8e/25718eb490b2eb301a2854c5dc74e75b.jpg' }, { name: 'Ned', img: 'https://i.pinimg.com/736x/9e-30/66/9e-30-66e2c2dff381cb878bbc3d3ba23a.jpg' }, { name: 'Stan', img: 'https://i.pinimg.com/736x/cc/48/c0/cc48c09c661d4f9af432a37c6b908e41.jpg' }, { name: 'Francine', img: 'https://i.pinimg.com/736x/18/c1/d2/18c1d2489a64b1b4f9cc78318e62da94.jpg' }, { name: 'Hayley', img: 'https://i.pinimg.com/736x/ff/0a/68/ff0a68de85d1bd98e29be7c05860b437.jpg' }, { name: 'Steve', img: 'https://i.pinimg.com/1200x/ad/b3/46/adb3465ea7efcf62537e95496d56a443.jpg' }, { name: 'Roger', img: 'https://i.pinimg.com/736x/32/27/79/322779874c754bcf1c1cc9fdd11252f5.jpg' }, { name: 'Leela', img: 'https://i.pinimg.com/736x/24/d4/80/24d4800deb67dcc14af56453c8c8c902.jpg' }, { name: 'Fry', img: 'https://i.pinimg.com/1200x/9c/df/cb/9cdfcb9b2a3f9653c7614c0ceb5798b5.jpg' }, { name: 'Bender', img: 'https://i.pinimg.com/736x/17/e2/65/17e2654def74fcc7137d202fb48f7c9a.jpg' }, { name: 'Robot Boy', img: 'https://i.pinimg.com/736x/77/78/2a/77782abe9ee9e431be635c6395322a0f.jpg' }, { name: 'Robot Girl', img: 'https://i.pinimg.com/736x/43/f9/7b/43f97b098e608a3e61b65aabf935bf5f.jpg' }, { name: 'Yang', img: 'https://i.pinimg.com/736x/ea/8f/2c/ea8f2c18bf548e4be17ab499aa98acb3.jpg' }, { name: 'Ying', img: 'https://i.pinimg.com/1200x/13/b4/ff/13b4ff2998c7f763004788fd67468e61.jpg' }, { name: 'Po', img: 'https://i.pinimg.com/1200x/e7/d4/62/e7d4628748d9b65e57e552ccf39fa935.jpg' }, { name: 'Tigre', img: 'https://i.pinimg.com/736x/e8/a6/52/e8a652c389c31e0be3232db065c3ce2f.jpg' }, { name: 'Shifu', img: 'https://i.pinimg.com/1200x/32/74/37/3274379162f8c714fa75a2391e56bed8.jpg' }, { name: 'Pucca', img: 'https://i.pinimg.com/736x/4f/c7/16/4fc716c74fd3c36cdf9c774546a94f9d.jpg' }, { name: 'Garu', img: 'https://i.pinimg.com/736x/ee/d6/41/eed6413f9bde5936c76cd8a0a96fcc3a.jpg' }, { name: 'Doraemon', img: 'https://i.pinimg.com/736x/ef/43/fc/ef43fc1923e2904d1007b3b8b7a2e509.jpg' }, { name: 'Nobita', img: 'https://i.pinimg.com/1200x/d4/ee/64/d4ee644406a064665a33d74980744e6f.jpg' }, { name: 'Phineas', img: 'https://i.pinimg.com/736x/01/f8/d9/01f8d9e5651859eab697441a4e7d69c7.jpg' }, { name: 'Ferb', img: 'https://i.pinimg.com/1200x/68/04/c6/6804c62c210eef6288ca1d555db326ef.jpg' }, { name: 'Isabella', img: 'https://i.pinimg.com/1200x/8f/b6/53/8fb6531754417925d60f7ba9276d824d.jpg' }, { name: 'Candace', img: 'https://i.pinimg.com/736x/e3/9d/95/e39d9504c7131e87c662b1f0537c3d7b.jpg' }, { name: 'Perry', img: 'https://i.pinimg.com/736x/6e/a4/33/6ea433e585e73b90d08f32e37b8047a7.jpg' }, { name: 'Stacy', img: 'https://i.pinimg.com/736x/49/5f/a2/495fa207ac08afdb0edd09019e4a06a4.jpg' }, { name: 'Spongebob', img: 'https://i.pinimg.com/736x/cf/8d/06/cf8d06adf1b9d91bacca860aed203dfd.jpg' }, { name: 'Patrick', img: 'https://i.pinimg.com/736x/0c/d7/cf/0cd7cfd63876a6579e68e53e10b4214e.jpg' }, { name: 'Squiddi', img: 'https://i.pinimg.com/736x/50/6d/1c/506d1c34be865276fc5914be49040b54.jpg' }, { name: 'Gary', img: 'https://i.pinimg.com/736x/87/a1/dc/87a1dcba8692affe1b31245d7fcc185a.jpg' }, { name: 'Robin GO', img: 'https://i.pinimg.com/736x/92/b6/50/92b650adbe57c5cec55a3ef46b65e933.jpg' }, { name: 'Robin TT', img: 'https://i.pinimg.com/1200x/3d/6c/68/3d6c6831fbe71721985a26e79f246049.jpg' }, { name: 'Stellarubia GO', img: 'https://i.pinimg.com/736x/5d/fc/47/5dfc47f4c755927482bd87b140d73850.jpg' }, { name: 'Stellarubia TT', img: 'https://i.pinimg.com/1200x/71/8e/9c/718e9ce6ee44358f4c99c2324c647101.jpg' }, { name: 'Corvina GO', img: 'https://i.pinimg.com/736x/a9/17/ed/a917ed4a9d6aadbd08868726c1069990.jpg' }, { name: 'Corvina TT', img: 'https://i.pinimg.com/736x/f4/d1/82/f4d182fd25c3ba3f07ae24b6518aa88b.jpg' }, { name: 'Wasabi', img: 'https://m.media-amazon.com/images/M/MV5BMjFlYzMwNDYtNDRiNS00YWRiLTg3YTAtNWFlNDk1MTZlYTk3XkEyXkFqcGc@._V1_.jpg' }, { name: 'Rekkit', img: 'https://simkl.in/episodes/16/162611351d718a4256_c.jpg' }, { name: 'Cosmo', img: 'https://i.pinimg.com/736x/47/22/99/472299b4c669c052c662df1730403d83.jpg' }, { name: 'Wanda', img: 'https://i.pinimg.com/736x/76/63/2c/76632cdd5765893ba8fbe9de12485dff.jpg' }, { name: 'Vicky', img: 'https://i.pinimg.com/736x/94/8c/a2/948ca2bf95d2536533c916cdce8b9ebc.jpg' }, { name: 'Papà di Timmy', img: 'https://i.pinimg.com/1200x/fe/a5/f3/fea5f385a3fb67dabe02838c2f3720dc.jpg' }, { name: 'Timmy', img: 'https://i.pinimg.com/736x/1d/54/89/1d548928bac7ea94fcad567cf74721ab.jpg' }, { name: 'Finn', img: 'https://i.pinimg.com/736x/8a/f3/a3/8af3a35a8e4397b9c5d81e0f4d42a2b0.jpg' }, { name: 'Jake', img: 'https://i.pinimg.com/736x/00/07/e5/0007e54a9a0d180850ed97718df1e432.jpg' }, { name: 'Gunter', img: 'https://i.pinimg.com/736x/26/96/ed/2696eda8f5c9babb308d1f123724b7c8.jpg' }, { name: 'Gommarosa', img: 'https://i.pinimg.com/736x/27/3e/df/273edf0076e41b90096717b89e04c1aa.jpg' }, { name: 'Marceline', img: 'https://i.pinimg.com/736x/bb/93/5e/bb935e39f2d66248b6e4178227bdb233.jpg' }, { name: 'Peach', img: 'https://i.pinimg.com/736x/e2/0b/46/e20b46677a4ac93d8de0f1877c264f4e.jpg' }, { name: 'Daisy', img: 'https://i.pinimg.com/1200x/fd/1d/4f/fd1d4f2285878621d08f7edacace0219.jpg' }, { name: 'Rosalinda', img: 'https://i.pinimg.com/736x/09/14/f0/0914f029e712e92de9d4f0081a5da032.jpg' }, { name: 'Wario', img: 'https://i.pinimg.com/736x/07/72/16/07721681614a459938a7f85ec450f957.jpg' }, { name: 'Yoshi', img: 'https://i.pinimg.com/1200x/08/ad/ab/08adaba4772c6d9de6b01d4fb6782d66.jpg' }, { name: 'Toadette', img: 'https://i.pinimg.com/1200x/dc/a5/b3/dca5b320572ae5daeb6fc46950c99101.jpg' }, { name: 'Johnny', img: 'https://i.pinimg.com/1200x/fc/a8/42/fca8428053cad044c13c16a941093275.jpg' }, { name: 'Billy', img: 'https://i.pinimg.com/736x/b6/55/a2/b655a2923fd04d20f9cf2520e8724536.jpg' }, { name: 'Mandy', img: 'https://i.pinimg.com/736x/9f/fc/09/9ffc0904acd73935296ce3dce83b66d2.jpg' }, { name: 'Tenebra', img: 'https://i.pinimg.com/736x/98/53/1e/98531e1d92e69384bd34411a21ec0256.jpg' }, { name: 'Carlos', img: 'https://i.pinimg.com/736x/04/bb/63/04bb630cd30a6c91f7792e77cc989394.jpg' }, { name: 'Ada Wong', img: 'https://i.pinimg.com/736x/19/ca/67/19ca678bedd73e74380204b75852e476.jpg' }, { name: 'Aang', img: 'https://i.pinimg.com/736x/21/c6/02/21c60273e7409b871140d5cee2cace5b.jpg' }, { name: 'Katara', img: 'https://i.pinimg.com/736x/f1/56/17/f156175f5f7790ef5e4632ce8086ba4a.jpg' }, { name: 'Zuko', img: 'https://i.pinimg.com/736x/86/b6/f3/86b6f3d6f859ea16d4e0d3d55e8bf3e4.jpg' }, { name: 'Toph', img: 'https://i.pinimg.com/736x/14/8a/3e/148a3efd1a09e4a858a389754afc5880.jpg' }, { name: 'Pikachu', img: 'https://i.pinimg.com/736x/ad/65/b6/ad65b669746561313925ffff392518bc.jpg' }, { name: 'Eevee', img: 'https://i.pinimg.com/1200x/09/52/82/095282d3ad6396e10730dabddceb3da0.jpg' }, { name: 'Ezio', img: 'https://i.pinimg.com/736x/94/3f/42/943f4260b7afd432b7f903772a914ed8.jpg' }, { name: 'Kirby', img: 'https://i.pinimg.com/736x/ba/e6/63/bae6637b3efecfd002f0c1f9605e53be.jpg' }, { name: 'Sonic', img: 'https://i.pinimg.com/736x/80/60/35/8060350ecfa5e867a48bab8f4744deb6.jpg' }, { name: 'Amy', img: 'https://i.pinimg.com/736x/b9/22/82/b9228241a5657f48ef8ea867ca4a4953.jpg' }, { name: 'Blaze', img: 'https://i.pinimg.com/736x/b8/89/61/b889619ef87861b12d6171172cf851a1.jpg' }, { name: 'Lillipup', img: 'https://i.pinimg.com/736x/e8/e2/47/e8e247cafe563d725c799f05a803fa1c.jpg' }, { name: 'Gwen', img: 'https://i.pinimg.com/736x/6d/86/50/6d86501af8e0b9e30b032cbfaad825d6.jpg' }, { name: 'Duncan', img: 'https://i.pinimg.com/1200x/a1/56/b1/a156b1d64b2e5309a8999be12c9a7247.jpg' }, { name: 'Courtney', img: 'https://i.pinimg.com/1200x/0a/c5/52/0ac5521dddf64ab0b5d08e6e36a2c10b.jpg' }, { name: 'Heather', img: 'https://i.pinimg.com/1200x/ef/9d/24/ef9d242224e10a517f925d68ee5833be.jpg' }, { name: 'Lindsay', img: 'https://i.pinimg.com/736x/0f/28/70/0f2870a28e938e0b00a489583f1659d3.jpg' }, { name: 'Alejandro', img: 'https://i.pinimg.com/1200x/e7/86/07/e78607796652e6e6f4b885f077837973.jpg' }, { name: 'Superboy', img: 'https://i.pinimg.com/1200x/34/20/a3/3420a34c3f0a287a8c06d435fcb577b7.jpg' }, { name: 'Ben 10', img: 'https://i.pinimg.com/736x/57/fc/52/57fc521fb6e3078cc118b980769aba8b.jpg' }, { name: 'Kevin', img: 'https://i.pinimg.com/736x/64/fc/a7/64fca772a45a4a332ccf98085f5417be.jpg' }, { name: 'Goku', img: 'https://i.pinimg.com/736x/38/47/f4/3847f4e67f63bc4329e2115b2669adc4.jpg' }, { name: 'Giyu', img: 'https://i.pinimg.com/1200x/46/ba/9b/46ba9b379e5550f14ab4aaa5a38fd80d.jpg' }, { name: 'Shinobu', img: 'https://i.pinimg.com/736x/0b/1d/01/0b1d01c03c7e5a69a92cae9696a528a6.jpg' }, { name: 'Tanjiro', img: 'https://i.pinimg.com/736x/b6/a0/64/b6a064006e8965bdd40128bbc8618a54.jpg' }, { name: 'Zenitsu', img: 'https://i.pinimg.com/736x/7c/67/f6/7c67f662bc3cfb7a82482a5d6e7e2837.jpg' }, { name: 'Hinosuke', img: 'https://i.pinimg.com/736x/21/98/f4/2198f46f5b1853035154873dd1a57950.jpg' }, { name: 'Rias', img: 'https://i.pinimg.com/736x/8d/e5/55/8de555c9e80992d31f7e4edebf190c1a.jpg' },
         ];
         
-        // Game State
-        let gameState = {};
+        let gameState = {
+            gameMode: null, // 'judge' or 'contestant'
+            episode: 1,
+            phase: 'SETUP', // SETUP, ACTION, CHALLENGE, VOTE, ELIMINATION, COMEBACK, FINALE
+            isMerged: false,
+            teams: [],
+            individualPlayers: [],
+            losingTeamIndex: -1,
+            immuneContestants: [],
+            eliminatedContestants: [],
+            jury: [], // For finale
+            comebacks: [],
+            humanPlayers: {}, // { 'host': { nickname, img, characterName, friends:[], allies:[], enemies:[] } }
+            playerStats: {}, // To track player stats like eliminations caused
+            aiData: {}, // { 'Gumball': { friendsWith: [], alliedWith: null, voteTarget: null } }
+            sabotageTarget: null, // Who was targeted for sabotage this episode
+            sabotageBackfired: false, // Did the sabotage fail
+            isCeremonySkipped: false,
+            interactionLog: [], 
+        };
         let roomConfig = {};
         let finalCast = [];
-        let currentRoomId = null;
-        let isCurrentUserHost = false;
-        let allPlayers = [];
-        let playerListenerUnsubscribe = null;
-        let roomListenerUnsubscribe = null;
-        let votesListenerUnsubscribe = null;
 
-        // --- DOM Elements ---
-        const mainMenu = document.getElementById('main-menu');
-        const gameRoom = document.getElementById('game-room');
-        const mainGameScreen = document.getElementById('main-game-screen');
-        const nextStepBtn = document.getElementById('next-step-btn');
-        const episodeTitle = document.getElementById('episode-title');
-        const gameStatusText = document.getElementById('game-status-text');
-        const hostInstructions = document.getElementById('host-instructions');
-        const hostPanel = document.getElementById('host-panel');
-        const voteTracker = document.getElementById('vote-tracker');
-        const voteTrackerList = document.getElementById('vote-tracker-list');
-        const votingModal = document.getElementById('voting-modal');
-        const comebackVotingModal = document.getElementById('comeback-voting-modal');
-        const ceremonyModal = document.getElementById('elimination-ceremony-modal');
-        const finaleVotingModal = document.getElementById('finale-voting-modal');
-        const winnerModal = document.getElementById('winner-modal');
-        const rankingModal = document.getElementById('ranking-modal');
-        const joinRoomModal = document.getElementById('join-room-modal');
-        
-        // --- Multiplayer & UI Functions ---
+        // --- DOM Element Variables ---
+        let mainMenu, mainGameScreen, characterSelectionScreen, modeSelectionModal, createRoomModal,
+            actionPhaseModal, interactionModal, votingModal, ceremonyModal, nextStepBtn, skipCeremonyBtn,
+            episodeTitle, gameStatusText, hostInstructions, customAlertModal, tieBreakerModal;
 
-        function showScreen(screenId) {
-            ['main-menu', 'game-room', 'main-game-screen'].forEach(id => {
-                document.getElementById(id).classList.add('hidden');
-            });
-            document.getElementById(screenId).classList.remove('hidden');
-        }
-
-        async function joinRoom(roomId) {
-            if (!currentUser) { alert("Autenticazione in corso, riprova tra un momento."); return; }
-            const roomRef = doc(db, "rooms", roomId);
-            const roomSnap = await getDoc(roomRef);
-
-            if (!roomSnap.exists()) {
-                document.getElementById('join-error-msg').textContent = "Stanza non trovata. Controlla il codice.";
-                document.getElementById('join-error-msg').classList.remove('hidden');
+        function runGameCycle() {
+            const allCurrentPlayers = allPlayers();
+            if (allCurrentPlayers.length <= 2 && gameState.phase !== 'FINALE') {
+                startFinale();
                 return;
             }
 
-            currentRoomId = roomId;
-            isCurrentUserHost = false;
-            roomConfig = roomSnap.data().config;
-
-            const playerRef = doc(db, "rooms", currentRoomId, "players", currentUser.uid);
-            await setDoc(playerRef, {
-                nickname: document.getElementById('nickname').value,
-                imageUrl: document.getElementById('player-image-preview').src,
-                isHost: false
-            });
-
-            listenForPlayers(currentRoomId);
-            listenForGameUpdates(currentRoomId);
-            
-            joinRoomModal.style.display = 'none';
-            showScreen('game-room');
-            populateCastGrid();
-        }
-
-        function listenForPlayers(roomId) {
-            const playersCollectionRef = collection(db, "rooms", roomId, "players");
-            if (playerListenerUnsubscribe) playerListenerUnsubscribe();
-
-            playerListenerUnsubscribe = onSnapshot(playersCollectionRef, (snapshot) => {
-                const playerList = document.getElementById('player-list');
-                const judgeList = document.getElementById('judge-list');
-                playerList.innerHTML = '';
-                judgeList.innerHTML = '';
-                allPlayers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                allPlayers.forEach(playerData => {
-                    const playerHtml = `
-                        <div class="flex items-center space-x-3 p-2 bg-gray-200 rounded-lg">
-                            <img src="${playerData.imageUrl}" class="w-10 h-10 rounded-full object-cover" onerror="this.src='https://placehold.co/40x40/000000/FFFFFF?text=?'">
-                            <span class="font-medium text-gray-800">${playerData.nickname} ${playerData.isHost ? '(Host)' : ''}</span>
-                        </div>`;
-                    playerList.innerHTML += playerHtml;
-                    judgeList.innerHTML += playerHtml;
-                });
-            });
-        }
-        
-        function listenForGameUpdates(roomId) {
-             const roomRef = doc(db, "rooms", roomId);
-             if (roomListenerUnsubscribe) roomListenerUnsubscribe();
-
-             roomListenerUnsubscribe = onSnapshot(roomRef, async (docSnap) => {
-                if (!docSnap.exists()) return;
-
-                const roomData = docSnap.data();
-                const newGameState = roomData.gameState;
-                if (!newGameState) return;
-
-                const isGameStarting = newGameState.status === 'started' && (!gameState || gameState.status !== 'started');
-                const oldPhase = gameState.phase;
-                const oldEliminationCandidates = gameState.eliminationCandidates || [];
-                gameState = newGameState;
-                roomConfig = roomData.config;
-                finalCast = gameState.finalCast || []; // Make sure clients get the final cast
-
-                if (isGameStarting) {
-                    showScreen('main-game-screen');
-                }
-
-                if (gameState.status === 'started') {
-                    updateUIFromGameState();
-                }
-                
-                if ((gameState.phase === 'VOTE' && oldPhase !== 'VOTE') || (gameState.phase === 'TIE_VOTE' && oldPhase !== 'TIE_VOTE')) {
-                    const isTiebreaker = gameState.phase === 'TIE_VOTE';
-                    const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
-                    openVotingModal(isTiebreaker);
-                    if (isCurrentUserHost) {
-                        voteTracker.classList.remove('hidden');
-                        listenForVotes(currentRoomId, voteDocumentId);
-                    }
-                } else if (gameState.phase !== 'VOTE' && gameState.phase !== 'TIE_VOTE' && gameState.phase !== 'ELIMINATION') {
-                    votingModal.style.display = 'none';
-                    if (votesListenerUnsubscribe) votesListenerUnsubscribe();
-                }
-
-                if (gameState.phase === 'ELIMINATION' && JSON.stringify(gameState.eliminationCandidates) !== JSON.stringify(oldEliminationCandidates)) {
-                    await showEliminationCeremony(gameState, gameState.eliminationCandidates);
-                    if (isCurrentUserHost) {
-                        const newState = JSON.parse(JSON.stringify(gameState));
-                        const eliminatedName = newState.eliminationCandidates[0];
-                        if(newState.isMerged) { newState.individualPlayers = newState.individualPlayers.filter(p => p.name !== eliminatedName); } 
-                        else { newState.teams[newState.losingTeamIndex].members = newState.teams[newState.losingTeamIndex].members.filter(m => m.name !== eliminatedName); }
-                        const eliminatedContestant = finalCast.find(c => c.name === eliminatedName);
-                        if (eliminatedContestant) {
-                            newState.eliminatedContestants.push(eliminatedContestant);
-                        }
-                        prepareNextEpisode(newState);
-                        await updateDoc(doc(db, "rooms", currentRoomId), { gameState: newState });
-                    }
-                }
-             });
-        }
-
-        function listenForVotes(roomId, voteDocumentId) {
-            if (votesListenerUnsubscribe) votesListenerUnsubscribe();
-
-            const voteDocRef = doc(db, "rooms", roomId, "votes", voteDocumentId);
-            votesListenerUnsubscribe = onSnapshot(voteDocRef, (docSnap) => {
-                if (!isCurrentUserHost) return;
-
-                const votes = docSnap.exists() ? docSnap.data() : {};
-                const voters = Object.keys(votes);
-                const totalVoters = allPlayers.length;
-
-                voteTrackerList.innerHTML = allPlayers.map(p => {
-                    const hasVoted = voters.includes(p.id);
-                    return `<span class="mr-2 ${hasVoted ? 'text-green-500' : 'text-red-500'}">${p.nickname}</span>`;
-                }).join('');
-                
-                nextStepBtn.disabled = voters.length < totalVoters;
-                hostInstructions.textContent = voters.length < totalVoters ? `In attesa di ${totalVoters - voters.length} voti...` : "Tutti hanno votato! Clicca 'Procedi' per contare i voti.";
-            });
-        }
-        
-        function updateUIFromGameState() {
-            if (!gameState || gameState.status !== 'started') return;
-            
-            episodeTitle.textContent = `Episodio ${gameState.episode}`;
-            gameStatusText.textContent = gameState.currentStatusText || '';
-            
-            if (isCurrentUserHost) {
-                hostPanel.classList.remove('hidden');
-                hostInstructions.textContent = gameState.currentHostInstructions || '';
-                nextStepBtn.disabled = false;
-                voteTracker.classList.add('hidden');
-            } else {
-                hostPanel.classList.add('hidden');
+            const comebackEvent = roomConfig.comebacks.find(c => c.episode === gameState.episode);
+            if (comebackEvent) {
+                gameState.phase = 'COMEBACK';
+                hostInstructions.textContent = "Un ritorno inaspettato è imminente!";
+                gameStatusText.textContent = "Qualcuno sta per avere una seconda possibilità...";
+                nextStepBtn.onclick = () => conductComeback(comebackEvent);
+                return;
             }
+            
+            const activeTeams = gameState.teams.filter(team => team.members.length > 0);
+            if (!gameState.isMerged && (gameState.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
+                mergeTeams();
+                return;
+            }
+
+            switch (gameState.phase) {
+                case 'ACTION': runActionPhase(); break;
+                case 'CHALLENGE': runChallenge(); break;
+                case 'VOTE': startVoting(); break;
+            }
+        }
+        
+        function mergeTeams() {
+            gameState.isMerged = true;
+            gameStatusText.textContent = "I TEAM SONO STATI UNITI! Da ora è ogni concorrente per sé!";
+            
+            const allRemainingPlayers = gameState.teams.flatMap(team => team.members);
+            gameState.individualPlayers = allRemainingPlayers;
+            gameState.teams = [];
 
             updateContestantsUI();
+            
+            gameState.phase = 'CHALLENGE';
+            hostInstructions.textContent = "Le squadre sono unite! Clicca 'Procedi' per la prima sfida individuale.";
+            nextStepBtn.onclick = runGameCycle;
         }
 
-        function displayRoomCode(roomId) {
-            const roomInfo = document.getElementById('room-info');
-            roomInfo.innerHTML = `
-                <p class="text-sm font-medium">Codice Stanza:</p>
-                <div class="flex items-center justify-center mt-1">
-                    <input id="room-code-display" type="text" value="${roomId}" class="text-center font-mono bg-white rounded-l-md p-1 w-full" readonly>
-                    <button id="copy-code-btn" class="bg-blue-500 text-white px-3 py-1 rounded-r-md hover:bg-blue-600">Copia</button>
-                </div>`;
-            document.getElementById('copy-code-btn').onclick = () => {
-                const codeInput = document.getElementById('room-code-display');
-                codeInput.select();
-                document.execCommand('copy');
-            };
+        function runActionPhase() {
+            if (gameState.gameMode !== 'contestant') {
+                gameState.phase = 'CHALLENGE';
+                runGameCycle();
+                return;
+            }
+            const hostPlayer = gameState.humanPlayers.host;
+            const isHostEliminated = !findPlayerByName(hostPlayer.characterName);
+            if (isHostEliminated) {
+                 gameStatusText.textContent = "Sei stato eliminato! Ora sei un membro della giuria.";
+                 hostInstructions.textContent = "Osserva come va a finire...";
+                 nextStepBtn.onclick = runGameCycle;
+                 gameState.phase = 'CHALLENGE';
+                 return;
+            }
+
+            hostInstructions.textContent = "È il tuo momento di agire. Scegli la tua mossa.";
+            actionPhaseModal.style.display = 'block';
         }
 
-        const populateCastGrid = () => {
-            const castContainer = document.getElementById('cast-container');
-            castContainer.innerHTML = '';
-            let charactersToShow = (roomConfig.castSelection === 'random') ? [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants) : castData;
-            document.getElementById('cast-title').textContent = (roomConfig.castSelection === 'random') ? "Cast Casuale Selezionato" : "Scegli il Cast";
-            document.getElementById('cast-subtitle').textContent = (roomConfig.castSelection === 'random') ? `Ecco i ${roomConfig.numContestants} concorrenti!` : `Seleziona ${roomConfig.numContestants} concorrenti`;
-
-            charactersToShow.forEach(character => {
-                const card = document.createElement('div');
-                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
-                card.dataset.name = character.name;
-                card.innerHTML = `<img src="${character.img}" alt="${character.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none" onerror="this.src='https://placehold.co/100x128/cccccc/000000?text=N/A'"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${character.name}</p>`;
-                
-                if (roomConfig.castSelection === 'manual' && isCurrentUserHost) {
-                    card.addEventListener('click', () => handleCharacterClick(card));
-                } else {
-                    card.classList.add('disabled');
+        function runChallenge() {
+            actionPhaseModal.style.display = 'none';
+            interactionModal.style.display = 'none';
+            gameState.sabotageTarget = null;
+            gameState.sabotageBackfired = false;
+            
+            Object.values(gameState.aiData).forEach(ai => {
+                if (ai.alliedWith && Math.random() < 0.2) {
+                    const humanPlayer = gameState.humanPlayers[ai.alliedWith];
+                    humanPlayer.allies = humanPlayer.allies.filter(allyName => allyName !== ai.name);
+                    ai.alliedWith = null;
                 }
-                castContainer.appendChild(card);
             });
-            updateStartButton();
-        };
+            updateRelationshipsHUD();
 
-        const handleCharacterClick = (card) => {
-            const numContestants = parseInt(roomConfig.numContestants, 10);
-            const selectedCount = document.querySelectorAll('#cast-container .character-card.selected').length;
-            if (card.classList.contains('selected')) card.classList.remove('selected');
-            else if (selectedCount < numContestants) card.classList.add('selected');
-            document.getElementById('cast-subtitle').textContent = `Selezionati ${document.querySelectorAll('#cast-container .character-card.selected').length} di ${numContestants}`;
-            updateStartButton();
-        };
-
-        const updateStartButton = () => {
-            const btn = document.getElementById('start-game-btn');
-            if (!isCurrentUserHost) { btn.disabled = true; return; }
-            if (roomConfig.castSelection === 'manual') {
-                btn.disabled = document.querySelectorAll('#cast-container .character-card.selected').length !== parseInt(roomConfig.numContestants, 10);
+            gameState.immuneContestants = [];
+            if (gameState.isMerged) {
+                const winner = gameState.individualPlayers[Math.floor(Math.random() * gameState.individualPlayers.length)];
+                gameState.immuneContestants.push(winner.name);
+                gameStatusText.textContent = `${winner.name} vince la sfida e ottiene l'immunità!`;
             } else {
-                btn.disabled = false;
+                 const activeTeams = gameState.teams.filter(team => team.members.length > 0);
+                 if (activeTeams.length < 2) {
+                      gameStatusText.textContent = `La sfida è annullata per mancanza di squadre.`;
+                 } else {
+                     const shuffledTeams = [...activeTeams].sort(() => 0.5 - Math.random());
+                     const winningTeam = shuffledTeams[0];
+                     const losingTeam = shuffledTeams[shuffledTeams.length - 1];
+                     gameState.losingTeamIndex = gameState.teams.findIndex(t => t.name === losingTeam.name);
+                     gameStatusText.textContent = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} andrà alla cerimonia.`;
+                 }
             }
-        };
-        
-        function setupGame() {
-            if (roomConfig.castSelection === 'manual') {
-                finalCast = Array.from(document.querySelectorAll('#cast-container .character-card.selected')).map(card => castData.find(c => c.name === card.dataset.name));
-            } else {
-                finalCast = [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants);
-            }
-            const shuffledCast = [...finalCast].sort(() => 0.5 - Math.random());
-            const numTeams = parseInt(roomConfig.numTeams, 10);
-            
-            gameState = {
-                finalCast: finalCast, // <-- Make sure all clients have this
-                episode: 0, phase: 'CHALLENGE', isMerged: false,
-                teams: Array.from({ length: numTeams }, (_, i) => ({ name: `Squadra ${i + 1}`, members: [] })),
-                individualPlayers: [], losingTeamIndex: -1, immuneContestants: [],
-                eliminatedContestants: [], comebacksUsed: 0,
-                currentStatusText: '', currentHostInstructions: '',
-                tieBreakerCandidates: [], eliminationCandidates: []
-            };
-            
-            shuffledCast.forEach((member, index) => gameState.teams[index % numTeams].members.push(member));
-        }
-        
-        function prepareNextEpisode(state) {
-            state.episode++;
-            state.phase = 'CHALLENGE';
-            state.currentStatusText = `Benvenuti all'episodio ${state.episode}!`;
-            state.currentHostInstructions = "Pronto per la prossima sfida? Clicca 'Procedi'.";
-            state.immuneContestants = [];
-            state.tieBreakerCandidates = [];
-            state.eliminationCandidates = [];
-        }
-        
-        async function runGameLogicForHost(state) {
-            const currentPhase = state.phase;
-
-            if (currentPhase === 'VOTE' || currentPhase === 'TIE_VOTE') {
-                await conductElimination(state);
-                return;
-            }
-
-            if (currentPhase === 'FINALE') {
-                startFinaleVoting(state);
-                return;
-            }
-            if (state.isMerged && state.individualPlayers.length <= 2) {
-                startFinale(state);
-                return;
-            }
-            if (roomConfig.comebackEnabled && state.episode === roomConfig.comebackEpisode && state.comebacksUsed < roomConfig.comebackCount) {
-                state.phase = 'COMEBACK';
-                state.currentHostInstructions = "È il momento del Comeback! Clicca 'Procedi' per votare chi far rientrare.";
-                state.currentStatusText = "Una seconda possibilità è all'orizzonte...";
-                return;
-            }
-            const activeTeams = state.teams.filter(team => team.members.length > 0);
-            if (!state.isMerged && (state.episode >= roomConfig.mergeEpisode || activeTeams.length <= 1)) {
-                mergeTeams(state);
-                return;
-            }
-            switch (currentPhase) {
-                case 'CHALLENGE': runChallenge(state); break;
-                case 'COMEBACK': startComebackVoting(state); break;
-            }
-        }
-        
-        function mergeTeams(state) {
-            state.isMerged = true;
-            state.phase = 'CHALLENGE';
-            state.individualPlayers = [];
-            state.teams.forEach(team => { state.individualPlayers.push(...team.members); });
-            state.teams = [];
-            state.currentStatusText = "LE SQUADRE SONO STATE SCIOLTE! Ognuno per sé!";
-            state.currentHostInstructions = "La fase individuale è iniziata! Clicca 'Procedi' per la prima sfida.";
+            hostInstructions.textContent = "È il momento di votare! Clicca 'Procedi'.";
+            updateContestantsUI();
+            gameState.phase = 'VOTE';
+            nextStepBtn.onclick = runGameCycle;
         }
 
-        function runChallenge(state) {
-            state.immuneContestants = [];
-            if (state.isMerged) {
-                const winner = state.individualPlayers[Math.floor(Math.random() * state.individualPlayers.length)];
-                state.immuneContestants.push(winner.name);
-                state.currentStatusText = `${winner.name} vince la sfida e ottiene l'immunità!`;
-            } else {
-                const activeTeams = state.teams.filter(team => team.members.length > 0);
-                const shuffledTeams = [...activeTeams].sort(() => 0.5 - Math.random());
-                const winningTeam = shuffledTeams[0];
-                const losingTeam = shuffledTeams[shuffledTeams.length - 1];
-                state.losingTeamIndex = state.teams.findIndex(t => t.name === losingTeam.name);
-
-                winningTeam.members.forEach(member => state.immuneContestants.push(member.name));
-                activeTeams.forEach(team => {
-                    if (team.name !== winningTeam.name && team.name !== losingTeam.name && team.members.length > 2) {
-                        const randomImmuneMember = team.members[Math.floor(Math.random() * team.members.length)];
-                        state.immuneContestants.push(randomImmuneMember.name);
-                    }
-                });
-                state.currentStatusText = `La Squadra ${winningTeam.name} vince la sfida! La Squadra ${losingTeam.name} perde.`;
-            }
-            
-            state.currentHostInstructions = "Clicca 'Procedi' per iniziare la votazione.";
-            state.phase = 'VOTE';
-        }
-        
-        async function openVotingModal(isTiebreaker = false) {
-            const votingContainer = document.getElementById('voting-candidates-container');
-            const votingTitle = document.getElementById('voting-title');
-            const votingSubtitle = document.getElementById('voting-subtitle');
-            const voteSubmittedMsg = document.getElementById('vote-submitted-msg');
-            
-            votingContainer.innerHTML = '';
-            voteSubmittedMsg.classList.add('hidden');
-
+        function startVoting() {
             let candidates;
-            if (isTiebreaker) {
-                votingTitle.textContent = "Rivotazione - Spareggio!";
-                votingSubtitle.textContent = "VOTA PER SALVARE un concorrente.";
-                candidates = gameState.tieBreakerCandidates.map(name => gameState.finalCast.find(c => c.name === name));
+            let canHumanVote = false;
+            const hostCharacterName = gameState.humanPlayers.host.characterName;
+
+            if (gameState.isMerged) {
+                candidates = gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name));
+                canHumanVote = !!gameState.individualPlayers.find(p => p.name === hostCharacterName);
             } else {
-                votingTitle.textContent = "Vota per l'eliminazione";
-                votingSubtitle.textContent = "Clicca sul concorrente che vuoi eliminare.";
-                if (gameState.isMerged) {
-                    candidates = gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name));
-                } else {
-                    const losingTeam = gameState.teams[gameState.losingTeamIndex];
-                    candidates = losingTeam.members.filter(member => !gameState.immuneContestants.includes(member.name));
-                }
-            }
-
-            const voteDocumentId = isTiebreaker ? `episode_${gameState.episode}_tiebreaker` : `episode_${gameState.episode}`;
-            const voteDocRef = doc(db, "rooms", currentRoomId, "votes", voteDocumentId);
-
-            const voteSnap = await getDoc(voteDocRef);
-            const currentVotes = voteSnap.exists() ? voteSnap.data() : {};
-            if (currentVotes[currentUser.uid]) {
-                votingContainer.innerHTML = '';
-                voteSubmittedMsg.classList.remove('hidden');
-                votingModal.style.display = 'flex';
-                return;
-            }
-
-            candidates.forEach(candidate => {
-                const card = document.createElement('div');
-                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
-                card.innerHTML = `<img src="${candidate.img}" alt="${candidate.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${candidate.name}</p>`;
-                card.onclick = async () => {
-                    await setDoc(voteDocRef, { [currentUser.uid]: candidate.name }, { merge: true });
-                    votingContainer.innerHTML = '';
-                    voteSubmittedMsg.classList.remove('hidden');
-                    if (isCurrentUserHost) {
-                        votingModal.style.display = 'none';
-                    }
-                };
-                votingContainer.appendChild(card);
-            });
-
-            votingModal.style.display = 'flex';
-        }
-
-        async function conductElimination(state) {
-            const isTiebreaker = state.phase === 'TIE_VOTE';
-            const voteDocumentId = isTiebreaker ? `episode_${state.episode}_tiebreaker` : `episode_${state.episode}`;
-            const voteDocRef = doc(db, "rooms", currentRoomId, "votes", voteDocumentId);
-            const voteSnap = await getDoc(voteDocRef);
-
-            if (!voteSnap.exists()) { console.error("Documento voti non trovato!"); return; }
-
-            const votes = voteSnap.data();
-            const voteCounts = {};
-            Object.values(votes).forEach(votedFor => {
-                voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
-            });
-
-            let candidatesToEliminate = [];
-            if (isTiebreaker) {
-                let minVotes = Infinity;
-                state.tieBreakerCandidates.forEach(name => {
-                    const count = voteCounts[name] || 0;
-                    if (count < minVotes) {
-                        minVotes = count;
-                        candidatesToEliminate = [name];
-                    } else if (count === minVotes) {
-                        candidatesToEliminate.push(name);
-                    }
-                });
-                const eliminatedName = candidatesToEliminate[Math.floor(Math.random() * candidatesToEliminate.length)];
-                state.phase = 'ELIMINATION';
-                state.eliminationCandidates = [eliminatedName];
-            } else {
-                let maxVotes = 0;
-                let atRiskNames = [];
-                 if (state.isMerged) {
-                    atRiskNames = state.individualPlayers.filter(p => !state.immuneContestants.includes(p.name)).map(p => p.name);
-                } else {
-                    const losingTeam = state.teams[state.losingTeamIndex];
-                    atRiskNames = losingTeam.members.filter(member => !state.immuneContestants.includes(member.name)).map(m => m.name);
-                }
-
-                if (atRiskNames.length === 0) {
-                    prepareNextEpisode(state);
+                const losingTeam = gameState.teams[gameState.losingTeamIndex];
+                if (!losingTeam) {
+                    prepareNextEpisode();
                     return;
                 }
+                if (losingTeam.members.length === 1) {
+                     gameStatusText.textContent = `${losingTeam.members[0].name} è l'ultimo membro della squadra perdente e viene eliminato automaticamente!`;
+                     conductElimination(losingTeam.members[0].name, losingTeam.members);
+                     return;
+                }
+                candidates = losingTeam.members;
+                canHumanVote = !!losingTeam.members.find(p => p.name === hostCharacterName);
+            }
+            
+            if (candidates.length <= 1) {
+                gameStatusText.textContent = "Non ci sono abbastanza concorrenti per una votazione.";
+                prepareNextEpisode();
+                return;
+            }
 
-                atRiskNames.forEach(name => {
-                    const count = voteCounts[name] || 0;
-                    if (count > maxVotes) {
-                        maxVotes = count;
-                        candidatesToEliminate = [name];
-                    } else if (count === maxVotes) {
-                        candidatesToEliminate.push(name);
+            if (gameState.gameMode === 'judge' || (gameState.gameMode === 'contestant' && canHumanVote)) {
+                const votingContainer = document.getElementById('voting-candidates-container');
+                votingContainer.innerHTML = '';
+                const votingPool = candidates.filter(c => c.name !== hostCharacterName);
+                
+                votingPool.forEach(candidate => {
+                    const card = document.createElement('div');
+                    card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                    card.innerHTML = `<img src="${candidate.img}" alt="${candidate.name}" class="w-full h-32 object-cover rounded-md mx-auto pointer-events-none"><p class="mt-2 font-semibold text-sm text-gray-700 pointer-events-none">${candidate.name}</p>`;
+                    card.onclick = () => {
+                        votingModal.style.display = 'none';
+                        conductElimination(candidate.name, candidates);
+                    };
+                    votingContainer.appendChild(card);
+                });
+                votingModal.style.display = 'block';
+                hostInstructions.textContent = "Votazione in corso...";
+            } else {
+                conductElimination(null, candidates);
+            }
+        }
+
+        function conductElimination(humanVote, candidates) {
+            const votes = {};
+            candidates.forEach(c => { votes[c.name] = { count: 0, voters: [] }; });
+            let eliminatedName = '';
+
+            if (gameState.gameMode === 'judge') {
+                if (humanVote && votes[humanVote]) {
+                    votes[humanVote].count = 1;
+                    votes[humanVote].voters.push(gameState.humanPlayers.host.nickname);
+                    eliminatedName = humanVote;
+                } else if (candidates.length > 0) {
+                    eliminatedName = candidates[Math.floor(Math.random() * candidates.length)].name;
+                }
+                runEliminationCeremony(eliminatedName, votes);
+
+            } else { // 'contestant' mode logic
+                const voters = gameState.isMerged ? allPlayers(true) : candidates.map(c => allPlayers(true).find(p => p.name === c.name));
+
+                voters.forEach(voter => {
+                    if (!voter) return;
+                    
+                    if (voter.isHuman) {
+                        if (humanVote) {
+                            votes[humanVote].count++;
+                            votes[humanVote].voters.push(voter.name);
+                        }
+                        return;
+                    }
+
+                    if (voter.data.alliedWith === 'host' && humanVote) {
+                        votes[humanVote].count++;
+                        votes[humanVote].voters.push(voter.name);
+                        return;
+                    }
+
+                    let votingPool = candidates.filter(c => c.name !== voter.name);
+                    if (votingPool.length === 0) return;
+
+                    const weightedPool = [];
+                    votingPool.forEach(target => {
+                        const targetIsHuman = Object.values(gameState.humanPlayers).some(hp => hp.characterName === target.name);
+                        let weight = 10;
+                        if (voter.data.friendsWith.includes(target.name) || (targetIsHuman && gameState.humanPlayers.host.friends.includes(voter.name))) weight = 1;
+                        if (targetIsHuman && gameState.humanPlayers.host.enemies.includes(voter.name)) weight = 30;
+                        if (target.name === gameState.sabotageTarget) weight = 50;
+                        if (targetIsHuman && gameState.sabotageBackfired) weight = 50;
+                        for (let i = 0; i < weight; i++) weightedPool.push(target.name);
+                    });
+                    
+                    if (weightedPool.length > 0) {
+                        const finalVote = weightedPool[Math.floor(Math.random() * weightedPool.length)];
+                        if (votes[finalVote]) {
+                            votes[finalVote].count++;
+                            votes[finalVote].voters.push(voter.name);
+                        }
+                    }
+                });
+
+                let maxVotes = -1;
+                let tiedCandidates = [];
+                for (const name in votes) {
+                    if (votes[name].count > maxVotes) {
+                        maxVotes = votes[name].count;
+                        tiedCandidates = [name];
+                    } else if (votes[name].count === maxVotes) {
+                        tiedCandidates.push(name);
                     }
                 }
-                );
 
-                if (candidatesToEliminate.length === 0) {
-                     candidatesToEliminate.push(atRiskNames[Math.floor(Math.random() * atRiskNames.length)]);
-                }
-
-
-                if (candidatesToEliminate.length > 1) {
-                    state.phase = 'TIE_VOTE';
-                    state.tieBreakerCandidates = candidatesToEliminate;
-                    state.currentStatusText = `PAREGGIO! Si va alla rivotazione tra: ${candidatesToEliminate.join(', ')}`;
-                    state.currentHostInstructions = "Clicca 'Procedi' per avviare la votazione di spareggio.";
+                if (tiedCandidates.length > 1) {
+                    startTieBreaker(tiedCandidates, votes);
+                    return; 
                 } else {
-                    state.phase = 'ELIMINATION';
-                    state.eliminationCandidates = candidatesToEliminate;
+                    eliminatedName = tiedCandidates[0];
+                    if (eliminatedName) {
+                        runEliminationCeremony(eliminatedName, votes);
+                    } else if (candidates.length === 1) {
+                        eliminatedName = candidates[0].name;
+                        votes[eliminatedName] = { count: 1, voters: ["Regolamento"] };
+                        runEliminationCeremony(eliminatedName, votes);
+                    } else {
+                        console.error("Could not determine an eliminated player in contestant mode.");
+                        prepareNextEpisode();
+                    }
                 }
             }
         }
 
-        async function showEliminationCeremony(state, eliminationCandidates) {
-            const ceremonyCandidatesContainer = document.getElementById('ceremony-candidates-container');
+        async function runEliminationCeremony(eliminatedName, votes) {
+            gameState.isCeremonySkipped = false;
             const ceremonyStatus = document.getElementById('ceremony-status');
-            
-            let atRiskContestants = state.isMerged ? state.individualPlayers.filter(p => !state.immuneContestants.includes(p.name)) : state.teams[state.losingTeamIndex].members.filter(m => !state.immuneContestants.includes(m.name));
-            
+            const ceremonyDetails = document.getElementById('ceremony-details');
+            const ceremonyVotesReadout = document.getElementById('ceremony-votes-readout');
+            const ceremonyCandidatesContainer = document.getElementById('ceremony-candidates-container');
+            ceremonyVotesReadout.innerHTML = '';
             ceremonyCandidatesContainer.innerHTML = '';
+            
+            let atRiskContestants = gameState.isMerged ? gameState.individualPlayers.filter(p => !gameState.immuneContestants.includes(p.name)) : gameState.teams[gameState.losingTeamIndex].members;
+            
             atRiskContestants.forEach(contestant => {
                 const card = document.createElement('div');
                 card.id = `ceremony-card-${contestant.name.replace(/\s+/g, '-')}`;
@@ -580,46 +389,191 @@
                 ceremonyCandidatesContainer.appendChild(card);
             });
 
+            const sortedContestants = atRiskContestants
+                .map(p => ({ name: p.name, voteCount: votes[p.name] ? votes[p.name].count : 0 }))
+                .sort((a, b) => a.voteCount - b.voteCount || Math.random() - 0.5);
+
             ceremonyModal.style.display = 'flex';
             
-            const eliminatedName = eliminationCandidates[0];
-            const safeContestants = atRiskContestants.filter(m => m.name !== eliminatedName);
-            
-            for (const safe of [...safeContestants].sort(() => 0.5 - Math.random())) {
-                await new Promise(r => setTimeout(r, 2000));
-                ceremonyStatus.textContent = `${safe.name}... sei salvo.`;
-                document.getElementById(`ceremony-card-${safe.name.replace(/\s+/g, '-')}`).classList.add('fading-out');
+            for (const contestant of sortedContestants) {
+                if (contestant.name === eliminatedName) continue;
+                if (gameState.isCeremonySkipped) break;
+                await new Promise(r => setTimeout(r, 1500));
+                if (gameState.isCeremonySkipped) break;
+                
+                const text = `<p class="text-2xl text-green-400">${contestant.name}, sei salvo/a con ${contestant.voteCount} voti.</p>`;
+                ceremonyVotesReadout.innerHTML += text;
+                ceremonyVotesReadout.scrollTop = ceremonyVotesReadout.scrollHeight;
+                const safeCard = document.getElementById(`ceremony-card-${contestant.name.replace(/\s+/g, '-')}`);
+                if (safeCard) safeCard.classList.add('fading-out');
             }
 
-            await new Promise(r => setTimeout(r, 3000));
+            if (!gameState.isCeremonySkipped) {
+                await new Promise(r => setTimeout(r, 2000));
+            }
             
-            ceremonyStatus.textContent = `${eliminatedName}, il tuo viaggio finisce qui.`;
-            document.getElementById(`ceremony-card-${eliminatedName.replace(/\s+/g, '-')}`).classList.add('eliminated');
+            const eliminatedVoteCount = votes[eliminatedName] ? votes[eliminatedName].count : 0;
+            ceremonyStatus.textContent = `${eliminatedName}, sei eliminato/a.`;
+            ceremonyDetails.textContent = `Con ${eliminatedVoteCount} voti. Voti da: ${votes[eliminatedName] ? votes[eliminatedName].voters.join(', ') : 'N/A'}`;
+            const eliminatedCard = document.getElementById(`ceremony-card-${eliminatedName.replace(/\s+/g, '-')}`);
+            if (eliminatedCard) eliminatedCard.classList.add('eliminated');
 
+            const eliminatedPlayer = allPlayers(false).find(p => p.name === eliminatedName);
+            if (eliminatedPlayer) {
+                const eliminatedData = { ...eliminatedPlayer, eliminatedInEpisode: gameState.episode };
+                gameState.eliminatedContestants.push(eliminatedData);
+                if (gameState.isMerged) {
+                    gameState.jury.push(eliminatedData);
+                }
+            }
+
+            if(gameState.isMerged) { 
+                gameState.individualPlayers = gameState.individualPlayers.filter(p => p.name !== eliminatedName); 
+            } else { 
+                gameState.teams.forEach(team => {
+                    team.members = team.members.filter(m => m.name !== eliminatedName);
+                });
+            }
+            
             await new Promise(r => setTimeout(r, 4000));
             ceremonyModal.style.display = 'none';
+
+            if (allPlayers().length <= 2) {
+                startFinale();
+            } else {
+                prepareNextEpisode();
+            }
         }
 
-        function startComebackVoting() { /* ... */ }
-        async function conductComeback(hostVotes) { /* ... */ }
-        function startFinale() { /* ... */ }
-        function startFinaleVoting() { /* ... */ }
-        async function conductFinale(hostVote) { /* ... */ }
-        function displayFinalRanking(winner, loser) { /* ... */ }
+        async function conductComeback(comebackEvent) {
+            gameStatusText.textContent = `Un evento di ritorno è stato attivato! ${comebackEvent.count} concorrente/i tornerà/nno...`;
+            await new Promise(r => setTimeout(r, 2000));
+
+            const returningContestants = [];
+            for (let i = 0; i < comebackEvent.count; i++) {
+                if (gameState.eliminatedContestants.length === 0) break;
+                const randomIndex = Math.floor(Math.random() * gameState.eliminatedContestants.length);
+                const [returnee] = gameState.eliminatedContestants.splice(randomIndex, 1);
+                returningContestants.push(returnee);
+
+                if (gameState.isMerged) {
+                    gameState.individualPlayers.push(returnee);
+                } else {
+                    let smallestTeam = gameState.teams.filter(t => t.members.length > 0).sort((a,b) => a.members.length - b.members.length)[0];
+                    if (smallestTeam) smallestTeam.members.push(returnee);
+                    else gameState.individualPlayers.push(returnee);
+                }
+            }
+            
+            gameStatusText.textContent = `${returningContestants.map(c => c.name).join(' e ')} tornano in gioco!`;
+            const indexToRemove = roomConfig.comebacks.findIndex(c => c.episode === gameState.episode);
+            if (indexToRemove > -1) roomConfig.comebacks.splice(indexToRemove, 1);
+            
+            await new Promise(r => setTimeout(r, 3000));
+            prepareNextEpisode();
+        }
+
+        function prepareNextEpisode() {
+            gameState.episode++;
+            gameState.phase = gameState.gameMode === 'contestant' ? 'ACTION' : 'CHALLENGE';
+            episodeTitle.textContent = `Episodio ${gameState.episode}`;
+            gameStatusText.textContent = `Benvenuti al nuovo episodio!`;
+            hostInstructions.textContent = "Pronto per il prossimo passo? Clicca 'Procedi'.";
+            gameState.immuneContestants = [];
+            updateContestantsUI();
+            updateRelationshipsHUD();
+            updatePlayerStatusCards();
+            updateEliminationRanking();
+            nextStepBtn.onclick = runGameCycle;
+        }
+        
+        function updatePlayerStatusCards() {
+            const statusContainer = document.getElementById('player-status-container');
+            statusContainer.innerHTML = '';
+
+            Object.values(gameState.humanPlayers).forEach(player => {
+                const eliminatedInfo = gameState.eliminatedContestants.find(p => p.name === player.characterName);
+                const isEliminated = !!eliminatedInfo;
+                const characterDetails = finalCast.find(c => c.name === player.characterName);
+                const imageSrc = characterDetails ? characterDetails.img : player.img;
+                
+                const statusHTML = `<div class="flex items-center p-2 bg-gray-100 rounded-lg shadow-sm ${isEliminated ? 'filter grayscale' : ''}">
+                    <img src="${imageSrc}" class="w-12 h-12 rounded-full object-cover mr-4">
+                    <div class="flex-grow">
+                        <p class="font-bold text-gray-800">${player.nickname}</p>
+                        <p class="text-sm text-gray-600">Controlla: ${player.characterName || 'N/A'}</p>
+                    </div>
+                    <div class="text-right">
+                         <p class="text-sm font-semibold ${isEliminated ? 'text-red-600' : 'text-green-600'}">${isEliminated ? `Eliminato` : 'In Gioco'}</p>
+                         ${isEliminated ? `<p class="text-xs text-gray-500">Ep. ${eliminatedInfo.eliminatedInEpisode}</p>` : ''}
+                    </div>
+                </div>`;
+                statusContainer.innerHTML += statusHTML;
+            });
+        }
+
+        function updateEliminationRanking() {
+            const rankingList = document.getElementById('elimination-ranking-list');
+            rankingList.innerHTML = '';
+            const totalContestants = roomConfig.numContestants;
+
+            if (gameState.eliminatedContestants.length > 0) {
+                 gameState.eliminatedContestants.forEach((eliminated, index) => {
+                    const rank = totalContestants - index;
+                    const card = document.createElement('div');
+                    card.className = "text-center text-white";
+                    card.innerHTML = `
+                        <img src="${eliminated.img}" onerror="this.src='https://placehold.co/64x64/7f1d1d/FFFFFF?text=X'" class="w-16 h-16 rounded-full object-cover mx-auto border-2 border-red-700 filter grayscale">
+                        <p class="text-sm font-semibold mt-1 drop-shadow-lg">${eliminated.name}</p>
+                        <p class="text-xs font-bold drop-shadow-lg">${rank}° Posto</p>
+                    `;
+                    rankingList.appendChild(card);
+                });
+            } else {
+                rankingList.innerHTML = '<p class="text-gray-200 text-sm">Nessun eliminato ancora.</p>';
+            }
+        }
+
+        function updateRelationshipsHUD() {
+            if (gameState.gameMode !== 'contestant') {
+                document.getElementById('relationships-hud').classList.add('hidden');
+                return;
+            }
+            document.getElementById('relationships-hud').classList.remove('hidden');
+            const player = gameState.humanPlayers.host;
+            const friendsList = document.getElementById('friends-list');
+            const alliesList = document.getElementById('allies-list');
+            const enemiesList = document.getElementById('enemies-list');
+
+            const createRelationshipHTML = (name) => {
+                const character = castData.find(c => c.name === name);
+                return `<div class="flex items-center space-x-2 ml-2"><img src="${character.img}" class="w-6 h-6 rounded-full object-cover"><span class="text-sm">${name}</span></div>`;
+            };
+
+            friendsList.innerHTML = `<h4 class="font-bold text-green-600">Amici (${player.friends.length})</h4>` + (player.friends.length > 0 ? player.friends.map(createRelationshipHTML).join('') : '<p class="text-sm text-gray-500 ml-2">Nessuno</p>');
+            alliesList.innerHTML = `<h4 class="font-bold text-blue-600 mt-2">Alleati (${player.allies.length})</h4>` + (player.allies.length > 0 ? player.allies.map(createRelationshipHTML).join('') : '<p class="text-sm text-gray-500 ml-2">Nessuno</p>');
+            enemiesList.innerHTML = `<h4 class="font-bold text-red-600 mt-2">Nemici (${player.enemies.length})</h4>` + (player.enemies.length > 0 ? player.enemies.map(createRelationshipHTML).join('') : '<p class="text-sm text-gray-500 ml-2">Nessuno</p>');
+        }
 
         function updateContestantsUI() {
-            if (!gameState || (!gameState.teams && !gameState.individualPlayers)) return;
-
             const teamsContainer = document.getElementById('teams-container');
             teamsContainer.innerHTML = '';
+            const allCurrentPlayers = allPlayers(true);
+
+            const createCardHTML = (member) => {
+                const isImmune = gameState.immuneContestants.includes(member.name);
+                const isHuman = member.isHuman;
+                return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''} ${isHuman ? 'player-controlled' : ''}">
+                    <img src="${member.details.img}" alt="${member.details.name}" class="w-full h-32 object-cover rounded-md mx-auto">
+                    <p class="mt-2 font-semibold text-sm text-gray-700">${member.details.name}</p>
+                    ${isHuman ? `<p class="text-xs text-blue-600 font-bold">${gameState.humanPlayers.host.nickname}</p>` : ''}
+                </div>`;
+            };
 
             if (gameState.isMerged) {
                 const container = document.createElement('div');
                 container.className = `team-container p-4 rounded-xl shadow-lg w-full bg-gray-200`;
-                let membersHtml = gameState.individualPlayers.map(member => {
-                    const isImmune = gameState.immuneContestants.includes(member.name);
-                    return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
-                }).join('');
+                let membersHtml = allCurrentPlayers.map(p => createCardHTML(p)).join('');
                 container.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">Concorrenti Individuali</h3><div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">${membersHtml}</div>`;
                 teamsContainer.appendChild(container);
             } else {
@@ -628,116 +582,488 @@
                     if (team.members.length === 0) return;
                     const teamEl = document.createElement('div');
                     teamEl.className = `team-container p-4 rounded-xl shadow-lg w-full md:w-5/12 ${teamColors[index % teamColors.length]}`;
-                    let membersHtml = team.members.map(member => {
-                        const isImmune = gameState.immuneContestants.includes(member.name);
-                        return `<div class="character-card disabled bg-white rounded-lg shadow-md p-2 text-center ${isImmune ? 'immune-aura' : ''}"><img src="${member.img}" alt="${member.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${member.name}</p></div>`;
+                    let membersHtml = team.members.map(memberDetails => {
+                        const fullPlayer = allCurrentPlayers.find(p => p.name === memberDetails.name);
+                        return createCardHTML(fullPlayer);
                     }).join('');
                     teamEl.innerHTML = `<h3 class="text-2xl font-bold text-center mb-4 text-gray-900">${team.name}</h3><div class="grid grid-cols-2 lg:grid-cols-3 gap-3">${membersHtml}</div>`;
                     teamsContainer.appendChild(teamEl);
                 });
             }
         }
+        
+        function allPlayers(includeDetails = false) {
+            const players = gameState.isMerged ? gameState.individualPlayers : gameState.teams.flatMap(t => t.members);
+            if (!includeDetails) return players;
 
-        // --- DOM Event Listeners Setup ---
-        document.addEventListener('DOMContentLoaded', () => {
-            const bgMusic = document.getElementById('bg-music');
-            document.body.addEventListener('click', () => { if (bgMusic.paused) bgMusic.play().catch(e => console.log(e)); }, { once: true });
+            return players.map(p => {
+                const isHuman = Object.values(gameState.humanPlayers).some(hp => hp.characterName === p.name);
+                return {
+                    name: p.name,
+                    details: p,
+                    isHuman: isHuman,
+                    data: gameState.aiData[p.name] || {}
+                }
+            });
+        }
 
-            const allModals = document.querySelectorAll('.modal');
-            allModals.forEach(modal => {
-                const closeBtn = modal.querySelector('.close');
-                if(closeBtn) closeBtn.onclick = () => modal.style.display = 'none';
+        function findPlayerByName(name, includeDetails = false) {
+            return allPlayers(includeDetails).find(p => p.name === name);
+        }
+
+        // --- Setup and Initialization ---
+
+        function initializeGame() {
+            const hostNickname = document.getElementById('nickname').value;
+            gameState.humanPlayers.host = { 
+                nickname: hostNickname, 
+                img: document.getElementById('player-image-preview').src,
+                characterName: null,
+                friends: [],
+                allies: [],
+                enemies: []
+            };
+            gameState.playerStats[hostNickname] = { eliminationsCaused: 0 };
+
+            if (gameState.gameMode === 'judge') {
+                setupJudgeGame();
+            } else if (gameState.gameMode === 'contestant') {
+                setupContestantGame();
+            }
+        }
+        
+        function setupJudgeGame() {
+            finalCast = [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants);
+            const shuffledCast = [...finalCast].sort(() => 0.5 - Math.random());
+            gameState.teams = roomConfig.teamNames.map(name => ({ name: name, members: [] }));
+            shuffledCast.forEach((member, index) => gameState.teams[index % roomConfig.teamNames.length].members.push(member));
+            
+            mainMenu.classList.add('hidden');
+            createRoomModal.style.display = 'none';
+            mainGameScreen.classList.remove('hidden');
+            
+            updatePlayerStatusCards();
+            updateEliminationRanking();
+            gameState.episode = 0;
+            prepareNextEpisode();
+        }
+
+        function setupContestantGame() {
+            createRoomModal.style.display = 'none';
+            mainMenu.classList.add('hidden');
+            characterSelectionScreen.classList.remove('hidden');
+
+            finalCast = [...castData].sort(() => 0.5 - Math.random()).slice(0, roomConfig.numContestants);
+            const container = document.getElementById('char-select-container');
+            container.innerHTML = '';
+            finalCast.forEach(character => {
+                const card = document.createElement('div');
+                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                card.dataset.name = character.name;
+                card.innerHTML = `<img src="${character.img}" alt="${character.name}" class="w-full h-32 object-cover rounded-md mx-auto"><p class="mt-2 font-semibold text-sm text-gray-700">${character.name}</p>`;
+                card.onclick = () => selectCharacter(character.name);
+                container.appendChild(card);
+            });
+            updatePlayerCharList();
+        }
+        
+        function selectCharacter(charName) {
+            const player = gameState.humanPlayers.host;
+            if (player.characterName) {
+                const oldCard = document.querySelector(`#char-select-container .character-card[data-name="${player.characterName}"]`);
+                if(oldCard) oldCard.classList.remove('selected');
+            }
+            player.characterName = charName;
+            const newCard = document.querySelector(`#char-select-container .character-card[data-name="${charName}"]`);
+            if(newCard) newCard.classList.add('selected');
+            
+            updatePlayerCharList();
+            document.getElementById('start-contestant-game-btn').disabled = false;
+        }
+
+        function updatePlayerCharList() {
+            const list = document.getElementById('player-char-list');
+            const player = gameState.humanPlayers.host;
+            list.innerHTML = `<div class="flex items-center p-2 bg-blue-100 rounded-lg">
+                <img src="${player.img}" class="w-10 h-10 rounded-full object-cover mr-3">
+                <div>
+                    <p class="font-bold">${player.nickname}</p>
+                    <p class="text-sm text-gray-600">${player.characterName || 'Scegliendo...'}</p>
+                </div>
+            </div>`;
+        }
+        
+        function startContestantGame() {
+            const hostCharacterName = gameState.humanPlayers.host.characterName;
+            const castForGame = finalCast.filter(c => c.name !== hostCharacterName);
+            const hostCharacterDetails = finalCast.find(c => c.name === hostCharacterName);
+
+            castForGame.forEach(c => { gameState.aiData[c.name] = { friendsWith: [], alliedWith: null }; });
+
+            const shuffledCast = [...castForGame].sort(() => 0.5 - Math.random());
+            gameState.teams = roomConfig.teamNames.map(name => ({ name: name, members: [] }));
+            
+            const allParticipants = [hostCharacterDetails, ...shuffledCast];
+            allParticipants.forEach((member, index) => {
+                gameState.teams[index % roomConfig.teamNames.length].members.push(member);
+            });
+
+            characterSelectionScreen.classList.add('hidden');
+            mainGameScreen.classList.remove('hidden');
+            gameState.episode = 0;
+            prepareNextEpisode();
+        }
+
+        // --- Tie Breaker Logic ---
+        function startTieBreaker(tiedCandidates, originalVotes) {
+            const playersContainer = document.getElementById('tie-breaker-players');
+            const status = document.getElementById('tie-breaker-status');
+            const forceRollBtn = document.getElementById('force-roll-btn');
+            playersContainer.innerHTML = '';
+            status.textContent = `I seguenti concorrenti hanno pareggiato con ${originalVotes[tiedCandidates[0]].count} voti. Devono sfidarsi al lancio del dado per salvarsi!`;
+
+            let rolls = {}; 
+            let playersWhoRolled = 0;
+
+            const checkAllRolled = () => {
+                if (playersWhoRolled === tiedCandidates.length) {
+                    determineTieBreakerLoser(rolls, originalVotes);
+                }
+            };
+
+            tiedCandidates.forEach(name => {
+                const character = allPlayers(true).find(p => p.name === name);
+                if (!character) return;
+                const card = document.createElement('div');
+                card.id = `tie-breaker-card-${name.replace(/\s+/g, '-')}`;
+                card.className = 'text-center';
+                card.innerHTML = `
+                    <img src="${character.details.img}" class="w-24 h-24 rounded-full object-cover mx-auto border-4 border-gray-400">
+                    <p class="mt-2 font-bold">${name}</p>
+                    <div class="mt-2 text-5xl font-bold h-16" id="dice-result-${name.replace(/\s+/g, '-')}">?</div>
+                    <button id="roll-btn-${name.replace(/\s+/g, '-')}" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md">Lancia</button>
+                `;
+                playersContainer.appendChild(card);
+
+                const rollBtn = document.getElementById(`roll-btn-${name.replace(/\s+/g, '-')}`);
+                const resultEl = document.getElementById(`dice-result-${name.replace(/\s+/g, '-')}`);
+
+                const performRoll = () => {
+                    rollBtn.disabled = true;
+                    let suspenseInterval = setInterval(() => {
+                        resultEl.textContent = Math.floor(Math.random() * 6) + 1;
+                    }, 100);
+
+                    setTimeout(() => {
+                        clearInterval(suspenseInterval);
+                        const finalRoll = Math.floor(Math.random() * 6) + 1;
+                        resultEl.textContent = finalRoll;
+                        rolls[name] = finalRoll;
+                        playersWhoRolled++;
+                        checkAllRolled();
+                    }, 1500);
+                };
+
+                if (character.isHuman) {
+                    rollBtn.onclick = performRoll;
+                } else {
+                    rollBtn.style.display = 'none';
+                    setTimeout(performRoll, 1000 + Math.random() * 1000);
+                }
             });
             
-            const imageUrlModal = document.getElementById('image-url-modal');
-            document.getElementById('image-url-btn').onclick = () => imageUrlModal.style.display = 'flex';
-            document.getElementById('submit-image-url').onclick = () => {
-                const url = document.getElementById('image-url-input').value.trim();
-                if(url) document.getElementById('player-image-preview').src = url;
-                imageUrlModal.style.display = 'none';
+            forceRollBtn.onclick = () => {
+                document.querySelectorAll('#tie-breaker-players button:not(:disabled)').forEach(btn => btn.click());
             };
-            document.getElementById('image-upload').onchange = (evt) => {
-                const [file] = evt.target.files;
-                if (file) { document.getElementById('player-image-preview').src = URL.createObjectURL(file); }
-            };
-
-            const createRoomModal = document.getElementById('create-room-modal');
-            document.getElementById('create-room-btn').onclick = () => createRoomModal.style.display = 'flex';
             
-            const comebackSelection = document.getElementById('comeback-selection');
-            const comebackOptionsContainer = document.getElementById('comeback-options-container');
-            comebackSelection.onchange = () => { comebackOptionsContainer.classList.toggle('hidden', comebackSelection.value === 'none'); };
+            tieBreakerModal.style.display = 'flex';
+        }
+        
+        async function determineTieBreakerLoser(rolls, originalVotes) {
+            const status = document.getElementById('tie-breaker-status');
+            const rollValues = Object.values(rolls);
+            const minRoll = Math.min(...rollValues);
+            const losers = Object.keys(rolls).filter(name => rolls[name] === minRoll);
 
-            document.getElementById('join-code-btn').onclick = () => joinRoomModal.style.display = 'flex';
-            document.getElementById('confirm-join-room').onclick = () => {
-                const code = document.getElementById('join-room-code-input').value.trim();
-                if (code) { joinRoom(code); }
-            };
+            await new Promise(r => setTimeout(r, 1000));
 
-            document.getElementById('confirm-create-room').addEventListener('click', async () => {
-                if (!currentUser) { alert("Autenticazione in corso, riprova tra un momento."); return; }
+            if (losers.length === 1) {
+                const eliminatedName = losers[0];
+                status.textContent = `${eliminatedName} ha ottenuto il punteggio più basso ed è eliminato/a!`;
+                await new Promise(r => setTimeout(r, 4000));
+                tieBreakerModal.style.display = 'none';
+                runEliminationCeremony(eliminatedName, originalVotes);
+            } else {
+                status.textContent = `Pareggio! ${losers.join(' e ')} hanno ottenuto il punteggio più basso. Devono lanciare di nuovo!`;
+                await new Promise(r => setTimeout(r, 4000));
+                startTieBreaker(losers, originalVotes); // Re-roll only with the losers
+            }
+        }
+
+        // --- Finale Logic ---
+        async function startFinale() {
+            gameState.phase = 'FINALE';
+            const finalists = allPlayers(false);
+            episodeTitle.textContent = "GRAN FINALE!";
+            gameStatusText.textContent = `${finalists[0].name} e ${finalists[1].name} sono in finale! La giuria deciderà il vincitore.`;
+            nextStepBtn.disabled = true;
+            hostInstructions.textContent = "Votazione della giuria in corso...";
+
+            const finaleContainer = document.getElementById('finale-candidates-container');
+            finaleContainer.innerHTML = finalists.map(p => `
+                <div class="text-center">
+                    <img src="${p.img}" class="w-40 h-40 rounded-full object-cover mx-auto border-4 border-yellow-400">
+                    <p class="mt-2 text-2xl font-bold">${p.name}</p>
+                </div>
+            `).join('');
+            document.getElementById('finale-voting-modal').style.display = 'block';
+
+            await new Promise(r => setTimeout(r, 4000)); 
+
+            const votes = { [finalists[0].name]: 0, [finalists[1].name]: 0 };
+            gameState.jury.forEach(juror => {
+                let voteForA = 0.5;
+                if (gameState.aiData[juror.name]?.friendsWith.includes(finalists[0].name)) voteForA += 0.2;
+                if (gameState.aiData[juror.name]?.friendsWith.includes(finalists[1].name)) voteForA -= 0.2;
                 
-                roomConfig = {
-                    numContestants: document.getElementById('num-contestants').value,
-                    numTeams: document.getElementById('num-teams').value,
-                    castSelection: document.getElementById('cast-selection').value,
-                    mergeEpisode: parseInt(document.getElementById('merge-episode').value, 10),
-                    comebackEnabled: document.getElementById('comeback-selection').value === 'enabled',
-                    comebackCount: parseInt(document.getElementById('comeback-count').value, 10),
-                    comebackEpisode: parseInt(document.getElementById('comeback-episode').value, 10),
-                };
-                
-                try {
-                    const roomDocRef = await addDoc(collection(db, "rooms"), {
-                        config: roomConfig,
-                        gameState: { status: 'lobby' },
-                        createdAt: new Date()
-                    });
-                    
-                    currentRoomId = roomDocRef.id;
-                    isCurrentUserHost = true;
-
-                    const hostPlayerRef = doc(db, "rooms", currentRoomId, "players", currentUser.uid);
-                    await setDoc(hostPlayerRef, {
-                        nickname: document.getElementById('nickname').value,
-                        imageUrl: document.getElementById('player-image-preview').src,
-                        isHost: true
-                    });
-
-                    displayRoomCode(currentRoomId);
-                    listenForPlayers(currentRoomId);
-                    listenForGameUpdates(currentRoomId);
-
-                    createRoomModal.style.display = 'none';
-                    showScreen('game-room');
-                    populateCastGrid();
-
-                } catch (e) {
-                    console.error("Errore nella creazione della stanza: ", e);
-                    alert("Errore nella creazione della stanza. Controlla la console per i dettagli.");
+                if (Math.random() < voteForA) {
+                    votes[finalists[0].name]++;
+                } else {
+                    votes[finalists[1].name]++;
                 }
             });
 
-            document.getElementById('start-game-btn').addEventListener('click', async () => {
-                setupGame();
-                prepareNextEpisode(gameState);
-                
-                const roomRef = doc(db, "rooms", currentRoomId);
-                await updateDoc(roomRef, {
-                    gameState: { ...gameState, status: 'started' }
-                });
+            const winnerName = votes[finalists[0].name] >= votes[finalists[1].name] ? finalists[0].name : finalists[1].name;
+            const winnerDetails = finalists.find(p => p.name === winnerName);
+            const runnerUp = finalists.find(p => p.name !== winnerName);
+
+            document.getElementById('finale-voting-modal').style.display = 'none';
+            document.getElementById('winner-card-container').innerHTML = `
+                <div class="winner-card text-center">
+                    <img src="${winnerDetails.img}" class="w-64 h-64 rounded-full object-cover mx-auto border-8 border-white shadow-2xl">
+                    <p class="mt-4 text-5xl font-black">${winnerDetails.name}</p>
+                </div>
+            `;
+            document.getElementById('winner-modal').style.display = 'flex';
+
+            // Prepare final ranking
+            const finalRankingList = document.getElementById('ranking-list');
+            finalRankingList.innerHTML = '';
+            const fullRanking = [winnerDetails, runnerUp, ...gameState.jury];
+            fullRanking.forEach((player, index) => {
+                const li = document.createElement('li');
+                li.textContent = `${index + 1}° Posto: ${player.name}`;
+                finalRankingList.appendChild(li);
             });
+        }
 
-            nextStepBtn.addEventListener('click', async () => {
-                if (!isCurrentUserHost) return;
 
-                const newState = JSON.parse(JSON.stringify(gameState));
-                await runGameLogicForHost(newState);
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+            mainMenu = document.getElementById('main-menu');
+            mainGameScreen = document.getElementById('main-game-screen');
+            characterSelectionScreen = document.getElementById('character-selection-screen');
+            modeSelectionModal = document.getElementById('mode-selection-modal');
+            createRoomModal = document.getElementById('create-room-modal');
+            actionPhaseModal = document.getElementById('action-phase-modal');
+            interactionModal = document.getElementById('interaction-modal');
+            votingModal = document.getElementById('voting-modal');
+            ceremonyModal = document.getElementById('elimination-ceremony-modal');
+            tieBreakerModal = document.getElementById('tie-breaker-modal');
+            nextStepBtn = document.getElementById('next-step-btn');
+            skipCeremonyBtn = document.getElementById('skip-ceremony-btn');
+            episodeTitle = document.getElementById('episode-title');
+            gameStatusText = document.getElementById('game-status-text');
+            hostInstructions = document.getElementById('host-instructions');
+            customAlertModal = document.getElementById('custom-alert-modal');
+
+            document.getElementById('open-mode-selection-btn').onclick = () => modeSelectionModal.style.display = 'block';
+            document.getElementById('select-judge-mode').onclick = () => {
+                gameState.gameMode = 'judge';
+                modeSelectionModal.style.display = 'none';
+                createRoomModal.style.display = 'block';
+                document.getElementById('comeback-config-container').innerHTML = `<label class="block text-sm font-medium">Comeback</label><select id="comeback-selection" class="w-full mt-1 border-gray-300 rounded-md"><option value="none">Nessun Comeback</option><option value="enabled">Abilita Comeback</option></select>`;
+            };
+            document.getElementById('select-contestant-mode').onclick = () => {
+                gameState.gameMode = 'contestant';
+                modeSelectionModal.style.display = 'none';
+                createRoomModal.style.display = 'block';
+                const container = document.getElementById('comeback-config-container');
+                // SIMPLIFIED COMEBACK UI
+                container.innerHTML = `<h4 class="font-semibold mt-2">Configurazione Ritorno (Opzionale)</h4>
+                <div class="flex items-center gap-2 mt-1">
+                    <label class="text-sm">Episodio:</label><input type="number" min="1" id="comeback-episode-input" class="w-20 border-gray-300 rounded-md text-sm">
+                    <label class="text-sm">Num. Concorrenti:</label><input type="number" min="1" value="1" id="comeback-count-input" class="w-20 border-gray-300 rounded-md text-sm">
+                </div>`;
+            };
+            
+            document.getElementById('num-teams').onchange = (e) => {
+                const num = parseInt(e.target.value, 10);
+                const container = document.getElementById('team-names-container');
+                container.innerHTML = '';
+                for (let i = 0; i < num; i++) {
+                    container.innerHTML += `<div><label class="block text-sm font-medium">Nome Squadra ${i+1}</label><input type="text" class="team-name-input w-full mt-1 border-gray-300 rounded-md" value="Squadra ${i+1}"></div>`;
+                }
+            };
+            document.getElementById('num-teams').dispatchEvent(new Event('change'));
+
+            document.getElementById('confirm-create-room').onclick = () => {
+                roomConfig.numContestants = parseInt(document.getElementById('num-contestants').value, 10);
+                roomConfig.mergeEpisode = parseInt(document.getElementById('merge-episode').value, 10);
+                roomConfig.teamNames = Array.from(document.querySelectorAll('.team-name-input')).map(input => input.value);
                 
-                const roomRef = doc(db, "rooms", currentRoomId);
-                await updateDoc(roomRef, { gameState: newState });
+                roomConfig.comebacks = [];
+                if (gameState.gameMode === 'contestant') {
+                    const episode = parseInt(document.getElementById('comeback-episode-input').value, 10);
+                    const count = parseInt(document.getElementById('comeback-count-input').value, 10);
+                    if (episode > 0 && count > 0) {
+                        roomConfig.comebacks.push({ episode, count });
+                    }
+                }
+                initializeGame();
+            };
+            
+            document.getElementById('start-contestant-game-btn').onclick = startContestantGame;
+            document.getElementById('show-ranking-btn').onclick = () => {
+                document.getElementById('winner-modal').style.display = 'none';
+                document.getElementById('ranking-modal').style.display = 'block';
+            };
+            
+            document.getElementById('action-interact').onclick = () => openInteractionModal('interact');
+            document.getElementById('action-sabotage').onclick = () => openInteractionModal('sabotage');
+            document.getElementById('action-nothing').onclick = runChallenge;
+
+            nextStepBtn.onclick = runGameCycle;
+            skipCeremonyBtn.onclick = () => { gameState.isCeremonySkipped = true; };
+            document.getElementById('custom-alert-close').onclick = () => customAlertModal.style.display = 'none';
+            
+            document.querySelectorAll('.modal .close').forEach(el => el.onclick = () => {
+                el.closest('.modal').style.display = 'none';
             });
         });
+
+        function openInteractionModal(type) {
+            actionPhaseModal.style.display = 'none';
+            const container = document.getElementById('interaction-candidates-container');
+            const modal = document.getElementById('interaction-modal');
+            modal.querySelector('h2').textContent = type === 'interact' ? 'Interagisci con...' : 'Sabota...';
+            container.innerHTML = '';
+            
+            const hostPlayer = gameState.humanPlayers.host;
+            const aiPlayers = allPlayers(true).filter(p => !p.isHuman);
+
+            aiPlayers.forEach(ai => {
+                const card = document.createElement('div');
+                card.className = 'character-card bg-white rounded-lg shadow-md p-2 text-center';
+                let buttonText = type === 'interact' ? 'Fai amicizia' : 'Sabota';
+                let buttonClass = type === 'interact' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600';
+                
+                if (type === 'interact' && hostPlayer.friends.includes(ai.name)) {
+                    buttonText = 'Stringi alleanza';
+                    buttonClass = 'bg-blue-500 hover:bg-blue-600';
+                }
+
+                card.innerHTML = `<img src="${ai.details.img}" class="w-full h-32 object-cover rounded-md mx-auto">
+                                 <p class="mt-2 font-semibold text-sm text-gray-700">${ai.name}</p>
+                                 <button class="w-full mt-2 px-2 py-1 text-xs text-white rounded ${buttonClass}">${buttonText}</button>`;
+                card.querySelector('button').onclick = () => handleInteraction(type, ai.name);
+                container.appendChild(card);
+            });
+            modal.style.display = 'block';
+        }
+
+        function handleInteraction(type, targetName) {
+            const hostPlayer = gameState.humanPlayers.host;
+            const hostCharacterName = hostPlayer.characterName;
+            let title = '';
+            let message = '';
+
+            if (type === 'interact') {
+                if (hostPlayer.friends.includes(targetName)) { 
+                    if (Math.random() < 0.5) { 
+                        hostPlayer.allies.push(targetName);
+                        gameState.aiData[targetName].alliedWith = 'host';
+                        title = 'ALLEANZA FORMATA!';
+                        message = `Hai stretto un'alleanza con ${targetName}. Ora voterà con te finché l'alleanza regge. (Questa informazione è segreta).`;
+                    } else {
+                        title = 'ALLEANZA FALLITA!';
+                        message = `${targetName} ha considerato la tua proposta di alleanza, ma ha deciso di rifiutare.`;
+                    }
+                } else { 
+                    if (Math.random() < 0.3) { 
+                        hostPlayer.friends.push(targetName);
+                        gameState.aiData[targetName].friendsWith.push(hostCharacterName);
+                        title = 'NUOVA AMICIZIA!';
+                        message = `Sei diventato amico di ${targetName}. Ora è molto meno probabile che ti voti per l'eliminazione.`;
+                        logInteraction(hostCharacterName, 'ha stretto amicizia con', targetName, 'successo');
+                    } else {
+                        title = 'AMICIZIA FALLITA!';
+                        message = `Il tuo tentativo di fare amicizia con ${targetName} non è andato a buon fine.`;
+                        logInteraction(hostCharacterName, 'ha tentato amicizia con', targetName, 'fallimento');
+                    }
+                }
+            } else if (type === 'sabotage') {
+                if (Math.random() < 0.5) { 
+                    gameState.sabotageTarget = targetName;
+                    title = 'SABOTAGGIO RIUSCITO!';
+                    message = `Il tuo sabotaggio contro ${targetName} ha funzionato. Gli altri concorrenti sono ora più propensi a votarlo.`;
+                    logInteraction(hostCharacterName, 'ha sabotato', targetName, 'successo');
+                } else { 
+                    gameState.sabotageBackfired = true;
+                    hostPlayer.enemies.push(targetName);
+                    title = 'SABOTAGGIO FALLITO!';
+                    message = `Sei stato scoperto! Il tuo sabotaggio contro ${targetName} ti si è ritorto contro. Ora sei tu il bersaglio principale e ${targetName} è un tuo nemico.`;
+                    logInteraction(hostCharacterName, 'ha tentato di sabotare', targetName, 'ritorto contro');
+                    
+                    const friendsLost = [];
+                    hostPlayer.friends.forEach(friendName => {
+                        if (Math.random() < 0.5) {
+                            friendsLost.push(friendName);
+                            const allyIndex = hostPlayer.allies.indexOf(friendName);
+                            if (allyIndex > -1) hostPlayer.allies.splice(allyIndex, 1);
+                            gameState.aiData[friendName].alliedWith = null;
+                        }
+                    });
+                    hostPlayer.friends = hostPlayer.friends.filter(f => !friendsLost.includes(f));
+                    if (friendsLost.length > 0) {
+                        message += `\n\nA causa del tuo fallimento, hai perso la fiducia e l'amicizia di: ${friendsLost.join(', ')}.`;
+                    }
+                }
+            }
+            
+            showCustomAlert(title, message);
+            updateRelationshipsHUD();
+            runChallenge();
+        }
+
+        function showCustomAlert(title, message) {
+            document.getElementById('custom-alert-title').textContent = title;
+            document.getElementById('custom-alert-message').textContent = message;
+            customAlertModal.style.display = 'block';
+        }
+
+        function logInteraction(actor, action, target, outcome) {
+            gameState.interactionLog.push({
+                episode: gameState.episode,
+                text: `<strong>${actor}</strong> ${action} <strong>${target}</strong>. (Esito: ${outcome})`
+            });
+            updateInteractionLogUI();
+        }
+
+        function updateInteractionLogUI() {
+            const logContainer = document.getElementById('interaction-log');
+            logContainer.innerHTML = '';
+            if (gameState.interactionLog.length === 0) {
+                 logContainer.innerHTML = '<p class="text-gray-500">Nessuna interazione ancora.</p>';
+                 return;
+            }
+            [...gameState.interactionLog].reverse().forEach(log => {
+                const p = document.createElement('p');
+                p.innerHTML = `<span class="font-semibold text-gray-500">Ep.${log.episode}:</span> ${log.text}`;
+                logContainer.appendChild(p);
+            });
+        }
+
     </script>
 </body>
 </html>

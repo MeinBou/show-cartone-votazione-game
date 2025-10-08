@@ -1,0 +1,1854 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Tutto Reality: La Sfida Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');
+            background-color: #f0e6d2;
+        }
+        .font-bangers { font-family: 'Bangers', cursive; }
+        .btn {
+            @apply font-bangers text-2xl text-white bg-green-600 border-4 border-black rounded-full px-8 py-3 shadow-[8px_8px_0px_rgba(0,0,0,1)] transition-all duration-200;
+        }
+        .btn:hover {
+            @apply bg-green-700 shadow-[6px_6px_0px_rgba(0,0,0,1)] translate-x-[2px] translate-y-[2px];
+        }
+        .btn:active {
+            @apply bg-green-800 shadow-[2px_2px_0px_rgba(0,0,0,1)] translate-x-[6px] translate-y-[6px];
+        }
+        .panel {
+            @apply bg-amber-100 border-4 border-black rounded-2xl p-6 shadow-[10px_10px_0px_rgba(0,0,0,0.8)];
+        }
+        .character-card {
+            @apply border-4 border-black rounded-lg p-2 text-center transition-transform duration-200 cursor-pointer;
+        }
+        .character-card.selected-by-me { @apply bg-blue-400 border-blue-600; }
+        .character-card.selected-by-other { @apply bg-gray-400 border-gray-600 cursor-not-allowed opacity-60; }
+        .character-card:not(.selected-by-other):hover { @apply transform scale-105; }
+        .team-color-1 { background-color: #ef4444; } /* red-500 */
+        .team-color-2 { background-color: #22c55e; } /* green-500 */
+        .team-color-3 { background-color: #3b82f6; } /* blue-500 */
+        .team-color-4 { background-color: #f97316; } /* orange-500 */
+
+        /* Stili Chat */
+        .chat-container { @apply flex flex-col h-full bg-amber-200 border-4 border-black rounded-xl; }
+        .chat-messages { @apply flex-grow p-4 overflow-y-auto; }
+        .chat-message { @apply mb-2; }
+        .chat-message .sender { @apply font-bold; }
+        .chat-input-form { @apply flex p-2 border-t-4 border-black; }
+        
+        /* Indicatore personaggio */
+        .my-character-indicator img {
+            @apply ring-4 ring-yellow-400 ring-offset-2 ring-offset-amber-100;
+        }
+        .safe-player-indicator img {
+            @apply ring-4 ring-green-500 ring-offset-2 ring-offset-amber-100;
+        }
+        .immune-player-indicator img {
+            @apply ring-4 ring-purple-500 ring-offset-2 ring-offset-amber-100;
+        }
+
+        /* Animazioni */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-amber-50 text-gray-800">
+
+    <div id="app" class="container mx-auto p-4 min-h-screen flex flex-col items-center justify-center">
+        <!-- L'applicazione verrà renderizzata qui -->
+    </div>
+
+    <!-- Modale per messaggi -->
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="panel max-w-md w-full text-center">
+            <h3 id="modal-title" class="font-bangers text-4xl text-red-600 mb-4">Attenzione!</h3>
+            <p id="modal-message" class="text-lg mb-6"></p>
+            <button id="modal-close" class="btn bg-red-500 hover:bg-red-600">Chiudi</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Importa le funzioni necessarie da Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CONFIGURAZIONE FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRdVmq9sIUJsLubKPTVUV0a1AIVpndhcA",
+            authDomain: "total-drama-la-sfida.firebaseapp.com",
+            projectId: "total-drama-la-sfida",
+            storageBucket: "total-drama-la-sfida.firebasestorage.app",
+            messagingSenderId: "668431070513",
+            appId: "1:668431070513:web:bd2a955d6ebfdc810d6c10",
+            measurementId: "G-QE0Z4XWTBG"
+        };
+        
+        // Questo ID identifica l'applicazione nel database. Puoi lasciarlo così.
+        const appId = 'a-tutto-reality-online';
+
+        // Inizializza Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+
+        // --- DATI PREDEFINITI ---
+        const FULL_CHARACTER_POOL = [
+            { name: "Candace", img: "https://i.pinimg.com/originals/1c/99/dc/1c99dc178ad0635627477c24254be37e.gif" },
+            { name: "Shinobu", img: "https://i.pinimg.com/originals/85/79/8e/85798e1981256fb35437bc755263c199.gif" },
+            { name: "Stellarubia", img: "https://i.pinimg.com/originals/04/ca/52/04ca5288d93bfe2bd47fbfe61c3ab6bd.gif" },
+            { name: "Lisa", img: "https://i.pinimg.com/originals/bb/1e/a0/bb1ea08a3f394a583e49466a27269702.gif" },
+            { name: "Nicole", img: "https://media1.tenor.com/m/hoZOijyaXTMAAAAC/the-amazing-world-of-gumball-nicole-watterson.gif" },
+            { name: "Garnet", img: "https://i.pinimg.com/originals/15/c5/92/15c592711b85314cecc49f4d5cb840e6.gif" },
+            { name: "Wanda", img: "https://media.tenor.com/8GITD5dPhl4AAAAM/wanda-clucking.gif" },
+            { name: "Fiona", img: "https://i.pinimg.com/originals/76/79/0b/76790bf7d2ca51ac60cb2fb22d45d0de.gif" },
+            { name: "Lapis", img: "https://i.pinimg.com/originals/8c/89/b1/8c89b1c86c32046422fdf07cb3f84921.gif" },
+            { name: "Gwen", img: "https://media.tenor.com/83wH-eEZQA4AAAAM/gwen-total-drama.gif" },
+            { name: "Velma", img: "https://i.pinimg.com/originals/d6/88/2c/d6882cd3f134979be924254b186cb01b.gif" },
+            { name: "Gommarosa", img: "https://i.pinimg.com/originals/f0/a2/63/f0a263c8848f14ba56651023d1afff91.gif" },
+            { name: "Gumball", img: "https://i.pinimg.com/originals/2a/51/64/2a5164c11b0468154dbcef44858e0769.gif" },
+            { name: "Stewie", img: "https://i.pinimg.com/originals/71/96/0f/71960fbdf396f732051c2e88a6c39443.gif" },
+            { name: "Patrick", img: "https://i.pinimg.com/originals/f9/e7/a0/f9e7a02065d880479c13d61b5d60f4f2.gif" },
+            { name: "Superboy", img: "https://i.pinimg.com/originals/94/a7/a7/94a7a7c2ee640fd4bdb9e623138c0467.gif" },
+            { name: "Gatto con gli stivali", img: "https://i.pinimg.com/originals/20/a7/20/20a7208d655c6d8f882fb4dfbacbc9fe.gif" },
+            { name: "Riolu", img: "https://i.pinimg.com/originals/e6/02/5d/e6025d56bfd79ae41e35f042148b57fb.gif" },
+            { name: "Johnny Bravo", img: "https://i.pinimg.com/originals/42/ef/0e/42ef0e9d902e54195316e9e6b5c48384.gif" },
+            { name: "Leone", img: "https://i.pinimg.com/originals/e1/d4/c7/e1d4c7ddfa20bbfdd77b564e548a4c3c.gif" },
+            { name: "Daffy", img: "https://i.pinimg.com/originals/0e/44/5f/0e445f6ddf7edc630ca49d844f58d34d.gif" },
+            { name: "Finn", img: "https://i.pinimg.com/originals/b2/51/17/b25117aace36f09451366283fc495008.gif" },
+            { name: "Robin", img: "https://i.pinimg.com/originals/49/42/73/4942739889be29a32da4a801e2fb4b9b.gif" },
+            { name: "Tenebra", img: "https://i.pinimg.com/originals/41/86/d5/4186d52093b622a9e0d596670cd65a0c.gif" },
+            { name: "Corvina", img: "https://media.tenor.com/ISJbIzN97cgAAAAM/raven-teen-titans.gif" },
+            { name: "Rose Quartz", img: "https://i.pinimg.com/originals/8b/27/33/8b2733b306c721fa069775d0829ca17e.gif" },
+            { name: "Orso Bianco", img: "https://i.pinimg.com/originals/43/a3/7f/43a37f37dee174a7548bbb42e25fdcf4.gif" },
+            { name: "Carlos", img: "https://i.pinimg.com/originals/32/0d/d1/320dd13031f1aba8a2d3d9b9837174f4.gif" },
+            { name: "Leon", img: "https://i.pinimg.com/originals/ad/58/df/ad58dfbdc13b5ed3ac50f7f5cd8984fb.gif" },
+            { name: "Robot Boy", img: "https://i.pinimg.com/originals/79/a0/4e/79a04e45499fdeba56c62a0465101e58.gif" },
+            { name: "Spongebob", img: "https://i.pinimg.com/originals/4c/74/21/4c742132b3f7018e49ae1901a2ab3e68.gif" },
+            { name: "Rosalinda", img: "https://i.pinimg.com/originals/37/6b/2c/376b2cfa68dcb3b52e4e309d5a29ad49.gif" },
+            { name: "Bloom", img: "https://i.pinimg.com/originals/2a/32/55/2a325525e2f610702d3ca4458be37a51.gif" },
+            { name: "Ponygon", img: "https://i.pinimg.com/originals/d3/70/64/d37064767df0ef73ec0602aa7b858967.gif" },
+            { name: "Francine", img: "https://i.pinimg.com/originals/fd/22/19/fd2219f7edf041a1982a234cb1fbbe00.gif" },
+            { name: "Roger", img: "https://i.pinimg.com/originals/f7/46/d9/f746d9350dbc2bf82e10b4596d192db0.gif" },
+            { name: "Ben 10", img: "https://i.pinimg.com/originals/7e/ea/10/7eea10f977a11a928eb203fe887e4522.gif" },
+            { name: "Androide 18", img: "https://i.pinimg.com/originals/65/74/e1/6574e1409f35f8ec1e626c1f69b04858.gif" },
+            { name: "Timmy", img: "https://i.pinimg.com/originals/5e/d9/33/5ed933a2f1b50617533feea46bbfc3d0.gif" },
+            { name: "Clarence", img: "https://i.pinimg.com/originals/7a/dd/7b/7add7b7b3d85d034780220623f08aba2.gif" },
+            { name: "Mordecai", img: "https://i.pinimg.com/originals/f4/ed/a8/f4eda82fa731f8b677cecedbcd1d358b.gif" },
+            { name: "Ellis", img: "https://i.pinimg.com/originals/3b/10/2c/3b102c22d54b391bfb50b1bbf75d3c43.gif" },
+            { name: "Daphne", img: "https://i.pinimg.com/originals/f1/cd/c8/f1cdc823a641797c38d3a26f6f9e4914.gif" },
+            { name: "Tecna", img: "https://i.pinimg.com/originals/43/44/da/4344da043aec0946577af8dba8bee564.gif" },
+            { name: "Zatch Bell", img: "https://i.pinimg.com/originals/c4/c7/63/c4c76304a85365557533f04bc2e07d21.gif" },
+            { name: "Shizuka", img: "https://i.pinimg.com/originals/68/8b/f3/688bf3cd0803d0ba7b3c7b1f8c0f8cf0.gif" },
+            { name: "Perry", img: "https://i.pinimg.com/originals/56/27/82/562782974be6adfdd03b37aa807dd2c1.gif" },
+            { name: "Mabel", img: "https://i.pinimg.com/originals/16/c6/f4/16c6f49f87040238b1ee63152f65eb6d.gif" },
+            { name: "Heather", img: "https://media.tenor.com/IwBy4Qxyus4AAAAM/heather-heathertotaldrama.gif" },
+            { name: "Danny Phantom", img: "https://i.pinimg.com/originals/22/99/8e/22998efdb246a5c9c79c1173684981f8.gif" }
+        ];
+
+        // --- STATO GLOBALE DELL'APPLICAZIONE ---
+        let globalState = {
+            currentUser: null,
+            currentScreen: 'loading',
+            nickname: '',
+            gameId: null,
+            gameData: null,
+            chatMessages: [],
+            unsubscribeGame: null,
+            unsubscribeChat: null,
+        };
+
+        // --- ELEMENTI DOM ---
+        const appContainer = document.getElementById('app');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalClose = document.getElementById('modal-close');
+
+        // --- FUNZIONI DI UTILITÀ ---
+        const showModal = (message, title = "Attenzione!") => {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+        };
+        modalClose.addEventListener('click', () => modal.classList.add('hidden'));
+
+        const generateId = (length = 5) => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+            return result;
+        };
+
+        // --- FUNZIONI DI RENDERIZZAZIONE ---
+        const render = () => {
+            const screenContainer = document.getElementById('screen-container');
+            if (!screenContainer) appContainer.innerHTML = '';
+
+            switch (globalState.currentScreen) {
+                case 'loading': renderLoading(); break;
+                case 'mainMenu': renderMainMenu(); break;
+                case 'createGame': renderCreateGame(); break;
+                case 'joinGame': renderJoinGame(); break;
+                case 'findGame': renderFindGame(); break;
+                case 'lobby': renderLobby(); break;
+                case 'characterSelection': renderCharacterSelection(); break;
+                case 'game': renderGame(); break;
+                default: renderMainMenu();
+            }
+        };
+        
+        const renderWithSidePanels = (screenHtml) => {
+            return `
+                <div class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh]">
+                    <div id="screen-container" class="lg:col-span-2 h-full overflow-y-auto p-2">
+                        ${screenHtml}
+                    </div>
+                    <div class="h-full flex flex-col gap-4">
+                        <div class="flex-shrink-0">
+                           ${renderPlayerInfoPanel()}
+                        </div>
+                        <div class="flex-grow min-h-0">
+                           ${renderChat()}
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderPlayerInfoPanel = () => {
+            if (!globalState.gameData) return '';
+
+            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
+            if (!myPlayer || myPlayer.characterIndex === null) return '';
+
+            const character = globalState.gameData.settings.characters[myPlayer.characterIndex];
+            const statusText = myPlayer.status === 'eliminated' ? 'Eliminato' : 'In Gara';
+            const statusColor = myPlayer.status === 'eliminated' ? 'text-red-600' : 'text-green-600';
+            
+            return `
+                <div class="panel p-3">
+                    <h3 class="font-bangers text-2xl text-center mb-2">Il Tuo Personaggio</h3>
+                    <div class="flex items-center gap-4">
+                        <img src="${character.img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-20 h-20 object-cover rounded-full border-4 border-black">
+                        <div>
+                            <p class="font-bold text-xl">${character.name}</p>
+                            <p class="font-bold ${statusColor}">${statusText}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderChat = () => {
+            const messagesHtml = globalState.chatMessages.map(msg => `
+                <div class="chat-message">
+                    <span class="sender" style="color: ${msg.senderColor || '#333'}">${msg.senderName}:</span>
+                    <span>${msg.text}</span>
+                </div>
+            `).join('');
+
+            return `
+                <div class="chat-container">
+                    <h3 class="font-bangers text-3xl text-center p-2 bg-amber-300 border-b-4 border-black">Chat</h3>
+                    <div id="chat-messages" class="chat-messages">
+                        ${messagesHtml || '<p class="text-gray-500">Nessun messaggio ancora...</p>'}
+                    </div>
+                    <form id="chat-form" class="chat-input-form">
+                        <input type="text" id="chat-input" class="w-full p-2 border-2 border-black rounded-l-lg" placeholder="Scrivi un messaggio...">
+                        <button type="submit" class="btn text-xl py-1 px-4 rounded-l-none">Invia</button>
+                    </form>
+                </div>
+            `;
+        };
+        
+        const updateChatView = () => {
+            const chatMessagesContainer = document.getElementById('chat-messages');
+            if (chatMessagesContainer) {
+                const messagesHtml = globalState.chatMessages.map(msg => `
+                    <div class="chat-message">
+                        <span class="sender" style="color: ${msg.senderColor || '#333'}">${msg.senderName}:</span>
+                        <span>${msg.text}</span>
+                    </div>
+                `).join('');
+                chatMessagesContainer.innerHTML = messagesHtml || '<p class="text-gray-500">Nessun messaggio ancora...</p>';
+                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+            }
+        };
+
+        const renderLoading = () => { appContainer.innerHTML = `<h1 class="font-bangers text-6xl text-center">Caricamento...</h1>`; };
+
+        const renderMainMenu = () => {
+            appContainer.innerHTML = `
+                <div class="text-center w-full max-w-lg">
+                    <h1 class="font-bangers text-8xl text-yellow-400" style="text-shadow: 4px 4px 0 #000, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 0 0 #000, -4px 0 0 #000, 0 4px 0 #000, 0 -4px 0 #000;">A Tutto Reality</h1>
+                    <h2 class="font-bangers text-6xl text-white mb-8" style="text-shadow: 3px 3px 0 #000;">La Sfida Online</h2>
+                    <div class="panel mb-8">
+                         <label for="nickname-input" class="block font-bold mb-2 text-xl">Inserisci il tuo Nickname:</label>
+                         <input type="text" id="nickname-input" class="w-full p-3 text-center text-xl font-bold border-4 border-black rounded" maxlength="15" value="${globalState.nickname}">
+                    </div>
+                    <div class="flex flex-col space-y-6">
+                        <button data-action="goToCreateGame" class="btn">Crea Partita</button>
+                        <button data-action="goToJoinGame" class="btn">Unisciti con Codice</button>
+                        <button data-action="goToFindGame" class="btn">Cerca Stanza Disponibile</button>
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderCreateGame = () => {
+            appContainer.innerHTML = `
+                <div class="panel w-full max-w-4xl">
+                    <h2 class="font-bangers text-4xl text-center mb-6">Crea la tua Partita</h2>
+                    <form id="create-game-form" class="space-y-6">
+                        <div>
+                            <label class="block font-bold mb-2">Numero Giocatori (12-30):</label>
+                            <input type="number" id="player-count" value="24" min="12" max="30" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-2">Numero Team (2-4):</label>
+                            <input type="number" id="team-count" value="2" min="2" max="4" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div id="team-configs" class="space-y-4"></div>
+                        <div>
+                            <label class="block font-bold mb-2">Episodio del Merge:</label>
+                            <input type="number" id="merge-episode" value="7" min="2" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-2">Ritorni in gara (0, 1, o 2):</label>
+                            <input type="number" id="return-count" value="1" min="0" max="2" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div id="return-episodes" class="space-y-2"></div>
+                        <hr class="border-black my-4">
+                        <h3 class="font-bangers text-3xl">Personaggi Personalizzati</h3>
+                        <div id="characters-list" class="space-y-4"></div>
+                        <button type="button" data-action="addCharacter" class="btn bg-blue-500 hover:bg-blue-600 text-xl py-2">Aggiungi Personaggio</button>
+                        <hr class="border-black my-4">
+                        <div class="text-center">
+                            <button type="submit" class="btn">Crea e Vai alla Lobby</button>
+                            <button type="button" data-action="goToMainMenu" class="btn bg-gray-500 hover:bg-gray-600 mt-4">Indietro</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            updateTeamConfigs();
+            updateReturnEpisodes();
+            
+            const shuffledPool = [...FULL_CHARACTER_POOL].sort(() => 0.5 - Math.random());
+            const playerCountInput = document.getElementById('player-count');
+            
+            const populateCharacters = () => {
+                const list = document.getElementById('characters-list');
+                list.innerHTML = '';
+                const count = parseInt(playerCountInput.value);
+                for(let i = 0; i < count; i++) {
+                    addCharacterRow(i, shuffledPool);
+                }
+            };
+            
+            populateCharacters();
+            playerCountInput.addEventListener('change', populateCharacters);
+
+            document.getElementById('team-count').addEventListener('change', updateTeamConfigs);
+            document.getElementById('return-count').addEventListener('change', updateReturnEpisodes);
+        };
+
+        const renderJoinGame = () => {
+            appContainer.innerHTML = `
+                <div class="panel max-w-md w-full text-center">
+                    <h2 class="font-bangers text-4xl mb-6">Unisciti con Codice</h2>
+                    <form id="join-game-form">
+                        <input type="text" id="game-code" placeholder="INSERISCI CODICE" class="w-full p-3 text-center text-2xl font-bold uppercase border-4 border-black rounded mb-4" maxlength="5">
+                        <button type="submit" class="btn">Unisciti</button>
+                    </form>
+                     <button type="button" data-action="goToMainMenu" class="btn bg-gray-500 hover:bg-gray-600 mt-4">Indietro</button>
+                </div>
+            `;
+        };
+
+        const renderFindGame = async () => {
+             appContainer.innerHTML = `<div class="panel w-full max-w-lg"><h2 class="font-bangers text-4xl text-center mb-4">Stanze Disponibili</h2><div id="game-list-container">Caricamento...</div><button type="button" data-action="goToMainMenu" class="btn bg-gray-500 hover:bg-gray-600 mt-6">Indietro</button></div>`;
+             try {
+                const gamesRef = collection(db, `artifacts/${appId}/public/data/games`);
+                const q = query(gamesRef, where("status", "==", "waiting"));
+                const querySnapshot = await getDocs(q);
+                const gameListContainer = document.getElementById('game-list-container');
+                if (querySnapshot.empty) {
+                    gameListContainer.innerHTML = '<p class="text-center">Nessuna stanza disponibile al momento. Creane una!</p>';
+                    return;
+                }
+                let listHtml = '<ul class="space-y-3">';
+                querySnapshot.forEach((doc) => {
+                    const game = doc.data();
+                    listHtml += `
+                        <li class="flex justify-between items-center bg-amber-200 p-3 rounded border-2 border-black">
+                            <span class="font-bold">Stanza ${doc.id} (${game.players.length}/${game.settings.playerCount})</span>
+                            <button data-action="joinWithId" data-id="${doc.id}" class="btn bg-blue-500 hover:bg-blue-600 text-xl py-1 px-4">Entra</button>
+                        </li>
+                    `;
+                });
+                listHtml += '</ul>';
+                gameListContainer.innerHTML = listHtml;
+             } catch (error) {
+                 console.error("Errore nel cercare le partite:", error);
+                 document.getElementById('game-list-container').innerHTML = '<p class="text-center text-red-600">Errore nel caricamento.</p>';
+             }
+        };
+
+        const renderLobby = () => {
+            if (!globalState.gameData) { renderLoading(); return; }
+            const { settings, players, hostId, id } = globalState.gameData;
+            const isHost = globalState.currentUser.uid === hostId;
+            let playersHtml = players.map(p => `<li class="bg-amber-200 p-2 rounded border-2 border-black">${p.name} ${p.uid === hostId ? '👑' : ''}</li>`).join('');
+            
+            const screenHtml = `
+                <div class="panel w-full">
+                    <h2 class="font-bangers text-4xl text-center mb-2">Lobby</h2>
+                    <p class="text-center font-bold text-2xl mb-4">Codice Stanza: <span class="text-red-600 bg-white px-2 rounded border-2 border-black">${id}</span></p>
+                    <p class="text-center mb-4">In attesa di altri giocatori... (${players.length}/${settings.playerCount})</p>
+                    <ul class="space-y-2 mb-6 h-64 overflow-y-auto p-2 bg-white border-2 border-black rounded">${playersHtml}</ul>
+                    <div class="text-center">
+                        ${isHost ? `<button data-action="startGame" class="btn">Avvia Partita</button>` : '<p class="font-bold">Solo l\'host può avviare la partita.</p>'}
+                        <button data-action="leaveGame" class="btn bg-red-500 hover:bg-red-600 mt-4">Esci</button>
+                        ${isHost ? `<button data-action="testFinale" class="btn bg-yellow-500 hover:bg-yellow-600 mt-4">Test Finale</button>` : ''}
+                    </div>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+
+        const renderCharacterSelection = () => {
+            const { settings, players } = globalState.gameData;
+            const myUid = globalState.currentUser.uid;
+            
+            const charactersHtml = settings.characters.map((char, index) => {
+                const playerWhoSelected = players.find(p => p.characterIndex === index);
+                let cardClass = 'bg-amber-200';
+                let selectedText = '';
+                if (playerWhoSelected) {
+                    if (playerWhoSelected.uid === myUid) {
+                        cardClass = 'selected-by-me';
+                        selectedText = '<p class="font-bold text-white text-sm mt-1">SELEZIONATO DA TE</p>';
+                    } else {
+                        cardClass = 'selected-by-other';
+                        selectedText = '<p class="font-bold text-white text-sm mt-1">GIÀ PRESO</p>';
+                    }
+                }
+                return `
+                    <div data-action="selectCharacter" data-index="${index}" class="character-card ${cardClass}">
+                        <img src="${char.img || 'https://placehold.co/100x100/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/100x100/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-md border-2 border-black">
+                        <p class="font-bold mt-2 truncate">${char.name}</p>
+                        ${selectedText}
+                    </div>
+                `;
+            }).join('');
+
+            const screenHtml = `
+                <div class="panel w-full">
+                    <h2 class="font-bangers text-4xl text-center mb-4">Scegli il tuo Personaggio</h2>
+                    <p class="text-center mb-6">Scegli segretamente il personaggio che vuoi interpretare. La tua scelta non sarà visibile agli altri.</p>
+                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        ${charactersHtml}
+                    </div>
+                    <p class="text-center mt-6 font-bold">In attesa che tutti i giocatori scelgano...</p>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+        
+        const renderGame = () => {
+            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
+            const isEliminated = myPlayer.status === 'eliminated';
+            const { status } = globalState.gameData;
+
+            // Handle final stages first, as spectators should see them too.
+            if (status === 'game_over') {
+                renderGameOver();
+                return;
+            }
+            if (status === 'finale') {
+                renderFinale();
+                return;
+            }
+
+            // If an eliminated player is viewing before the finale, show the spectator view.
+            if (isEliminated) {
+                renderSpectatorView();
+                return;
+            }
+            
+            // From here on, only active players will execute this code.
+            if (status === 'tiebreaker') {
+                renderTiebreaker();
+                return;
+            }
+
+            const { settings, players, teams, episode, challengeResult, votes, elimination, isMerged, immunePlayerUid } = globalState.gameData;
+            const getCharacter = (player) => settings.characters[player.characterIndex];
+
+            let mainContentHtml = '';
+            if (isMerged) {
+                const allPlayersHtml = players.filter(p => p.status === 'active').map(p => {
+                    const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
+                    const isImmune = p.uid === immunePlayerUid;
+                    let indicatorClass = '';
+                    if (isMyCharacter) indicatorClass = 'my-character-indicator';
+                    if (isImmune) indicatorClass = 'immune-player-indicator';
+
+                    return `
+                    <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
+                        <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                        <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                        ${isImmune ? `<p class="absolute -bottom-4 font-bangers text-xl text-purple-600" style="text-shadow: 1px 1px 0 #fff;">IMMUNE</p>` : ''}
+                    </div>
+                    `;
+                }).join('');
+                mainContentHtml = `
+                    <div class="panel bg-gray-700 text-white">
+                        <h3 class="font-bangers text-4xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">MERGE!</h3>
+                        <div class="grid grid-cols-4 sm:grid-cols-6 gap-4">${allPlayersHtml}</div>
+                    </div>
+                `;
+            } else {
+                    mainContentHtml = teams.map(team => {
+                    const membersHtml = players
+                        .filter(p => p.teamId === team.id && p.status === 'active')
+                        .map(p => {
+                            const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
+                            const isSafe = elimination && elimination.safePlayers && elimination.safePlayers.includes(p.uid);
+                            let indicatorClass = '';
+                            if (isMyCharacter) indicatorClass = 'my-character-indicator';
+                            if (isSafe) indicatorClass = 'safe-player-indicator';
+                            
+                            return `
+                            <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
+                                <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                                <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                                ${isSafe ? `<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>` : ''}
+                            </div>
+                        `}).join('');
+
+                    return `
+                        <div class="panel team-color-${team.id} text-white">
+                            <h3 class="font-bangers text-3xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">Team ${team.name}</h3>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-4">${membersHtml}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            const isHost = globalState.currentUser.uid === globalState.gameData.hostId;
+            let gameControls = '';
+            let statusMessage = '';
+
+            if (status === 'challenge') {
+                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Episodio ${episode}: Pronti per la sfida!</h2>`;
+                if(isHost) gameControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
+            } else if (status === 'challenge_result') {
+                const winningTeams = teams.filter(t => challengeResult.winningTeamIds.includes(t.id));
+                const losingTeam = teams.find(t => t.id === challengeResult.losingTeamId);
+                statusMessage = `
+                    <h2 class="font-bangers text-5xl text-center my-4">Risultato Sfida!</h2>
+                    <p class="text-center text-2xl font-bold text-green-600">Team Vincenti: ${winningTeams.map(t=>t.name).join(', ')}</p>
+                    <p class="text-center text-xl font-bold text-red-600 mt-2">Team Perdente: ${losingTeam.name}</p>
+                `;
+                if(isHost) gameControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
+            } else if (status === 'elimination') {
+                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-600">Cerimonia di Eliminazione!</h2>`;
+                const alreadyVoted = votes && votes[myPlayer.uid];
+                if(alreadyVoted) statusMessage += `<p class="text-center font-bold">Hai votato. In attesa degli altri...</p>`;
+                else statusMessage += renderVoteScreen();
+            } else if (status === 'reveal') {
+                    statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Il Momento della Verità...</h2><p class="text-center">L'host sta per rivelare i voti...</p>`;
+                    if(isHost) gameControls = `<button data-action="startVoteReveal" class="btn mt-6">Inizia a Rivelare i Voti</button>`;
+            } else if (status === 'reveal_in_progress') {
+                const lastSafePlayerUid = elimination.safePlayers[elimination.safePlayers.length - 1];
+                const lastSafePlayer = players.find(p => p.uid === lastSafePlayerUid);
+                const lastSafeCharacter = getCharacter(lastSafePlayer);
+                const votesForSafe = elimination.voteCounts[lastSafePlayerUid] || 0;
+                statusMessage = `<h2 class="font-bangers text-4xl text-center my-4">${lastSafeCharacter.name} è salvo con ${votesForSafe} voti!</h2>`;
+
+                if(elimination.atRisk.length - elimination.safePlayers.length === 2) {
+                    statusMessage += `<p class="font-bangers text-3xl text-center text-red-600 my-4">Siamo arrivati agli ultimi due...</p>`;
+                }
+
+                if(isHost) gameControls = `<button data-action="revealNextSafe" class="btn mt-6">Rivela Prossimo Salvo</button>`;
+
+            } else if (status === 'revealed') {
+                const eliminatedPlayer = players.find(p => p.uid === elimination.eliminatedUid);
+                const eliminatedChar = getCharacter(eliminatedPlayer);
+                const votesForEliminated = elimination.voteCounts[elimination.eliminatedUid] === 'Spareggio' ? 'allo spareggio' : `con ${elimination.voteCounts[elimination.eliminatedUid]} voti`;
+                    statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato ${votesForEliminated}!</h2>`;
+                    if(isHost) gameControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
+            }
+
+            const screenHtml = `
+                <div class="w-full">
+                    ${statusMessage}
+                    <div class="grid grid-cols-1 ${isMerged ? '' : 'md:grid-cols-2'} gap-6 mt-6">
+                        ${mainContentHtml}
+                    </div>
+                    <div class="text-center">
+                        ${gameControls}
+                    </div>
+                    ${renderEliminationRanking()}
+                </div>
+            `;
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+        
+        const renderSpectatorView = () => {
+            const screenHtml = renderGameHtmlForSpectator();
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+        
+        const renderGameHtmlForSpectator = () => {
+            const { settings, players, status, hostId, teams, isMerged, immunePlayerUid, elimination } = globalState.gameData;
+            const isHost = globalState.currentUser.uid === hostId;
+            const getCharacter = (player) => settings.characters[player.characterIndex];
+            let hostControls = '';
+
+            if (isHost) {
+                 if (status === 'challenge') {
+                     hostControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
+                } else if (status === 'challenge_result') {
+                     hostControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
+                } else if (status === 'reveal') {
+                    hostControls = `<button data-action="startVoteReveal" class="btn mt-6">Inizia a Rivelare i Voti</button>`;
+                } else if (status === 'reveal_in_progress') {
+                    hostControls = `<button data-action="revealNextSafe" class="btn mt-6">Rivela Prossimo Salvo</button>`;
+                } else if (status === 'revealed') {
+                    hostControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
+                }
+            }
+            
+            let mainContentHtml = '';
+            if (isMerged) {
+                const allPlayersHtml = players.filter(p => p.status === 'active').map(p => {
+                    const isImmune = p.uid === immunePlayerUid;
+                    return `
+                    <div class="relative flex flex-col items-center text-center ${isImmune ? 'immune-player-indicator' : ''}" title="${getCharacter(p).name}">
+                        <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                        <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                        ${isImmune ? '<p class="absolute -bottom-4 font-bangers text-xl text-purple-600" style="text-shadow: 1px 1px 0 #fff;">IMMUNE</p>' : ''}
+                    </div>
+                    `;
+                }).join('');
+                mainContentHtml = `<div class="panel bg-gray-700 text-white"><h3 class="font-bangers text-4xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">MERGE!</h3><div class="grid grid-cols-4 sm:grid-cols-6 gap-4">${allPlayersHtml}</div></div>`;
+            } else if (teams) {
+                 mainContentHtml = teams.map(team => {
+                    const membersHtml = players.filter(p => p.teamId === team.id && p.status === 'active').map(p => {
+                        const isSafe = elimination && elimination.safePlayers && elimination.safePlayers.includes(p.uid);
+                        return `
+                        <div class="relative flex flex-col items-center text-center ${isSafe ? 'safe-player-indicator' : ''}" title="${getCharacter(p).name}">
+                            <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                            <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                            ${isSafe ? '<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>' : ''}
+                        </div>
+                    `}).join('');
+                    return `<div class="panel team-color-${team.id} text-white"><h3 class="font-bangers text-3xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">Team ${team.name}</h3><div class="grid grid-cols-3 sm:grid-cols-4 gap-4">${membersHtml}</div></div>`;
+                }).join('');
+            }
+
+            return `
+                <div class="panel text-center">
+                    <h2 class="font-bangers text-5xl text-red-600">SEI STATO ELIMINATO!</h2>
+                    <p class="text-xl mt-4">Stai assistendo alla partita come spettatore.</p>
+                </div>
+                <div class="grid grid-cols-1 ${isMerged ? '' : 'md:grid-cols-2'} gap-6 mt-6">${mainContentHtml}</div>
+                <div class="text-center mt-6">${hostControls}</div>
+                ${renderEliminationRanking()}
+            `;
+        };
+
+        const renderVoteScreen = () => {
+            const { players, settings, isMerged, immunePlayerUid } = globalState.gameData;
+            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+            
+            let voteOptions;
+            if (isMerged) {
+                voteOptions = players.filter(p => p.status === 'active' && p.uid !== myPlayer.uid && p.uid !== immunePlayerUid);
+            } else {
+                voteOptions = players.filter(p => p.teamId === myPlayer.teamId && p.status === 'active' && p.uid !== myPlayer.uid);
+            }
+
+            const voteOptionsHtml = voteOptions.map(p => {
+                const character = settings.characters[p.characterIndex];
+                return `
+                    <div data-action="votePlayer" data-uid="${p.uid}" class="character-card bg-amber-200">
+                        <img src="${character.img || 'https://placehold.co/100x100/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/100x100/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-md border-2 border-black">
+                        <p class="font-bold mt-2">${character.name}</p>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="panel mt-6 max-w-3xl mx-auto">
+                    <h3 class="font-bangers text-3xl text-center mb-4">Vota chi eliminare!</h3>
+                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        ${voteOptionsHtml}
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderEliminationRanking = () => {
+            const { eliminationOrder, players, settings } = globalState.gameData;
+            if (!eliminationOrder || eliminationOrder.length === 0) return '';
+
+            const rankingHtml = eliminationOrder.map((uid, index) => {
+                const player = players.find(p => p.uid === uid);
+                if (!player) return '';
+                const character = settings.characters[player.characterIndex];
+                return `
+                    <div class="flex items-center gap-3 bg-amber-200 p-2 rounded border-2 border-black">
+                        <span class="font-bangers text-2xl">${settings.playerCount - index}°</span>
+                        <img src="${character.img || 'https://placehold.co/40x40/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/40x40/e2e8f0/333?text=Error';" class="w-10 h-10 object-cover rounded-full border-2 border-black">
+                        <span class="font-bold">${character.name}</span>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="panel mt-8">
+                    <h3 class="font-bangers text-3xl text-center mb-4">Classifica di Eliminazione</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        ${rankingHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderTiebreaker = () => {
+             const { settings, players, tiebreaker } = globalState.gameData;
+             const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+             const iAmInTiebreaker = tiebreaker.players.some(p => p.uid === myPlayer.uid);
+             const myRollInfo = iAmInTiebreaker ? tiebreaker.players.find(p => p.uid === myPlayer.uid) : null;
+             const isHost = globalState.currentUser.uid === globalState.gameData.hostId;
+
+             const getCharacter = (player) => settings.characters[player.characterIndex];
+
+             const playersInTiebreakerHtml = tiebreaker.players.map(pInfo => {
+                 const player = players.find(p => p.uid === pInfo.uid);
+                 return `
+                     <div class="text-center">
+                         <img src="${getCharacter(player).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-full border-4 border-black">
+                         <p class="font-bold text-xl mt-2">${getCharacter(player).name}</p>
+                         ${pInfo.roll ? `<p class="font-bangers text-5xl mt-2">${pInfo.roll} 🎲</p>` : '<p class="text-gray-500">In attesa...</p>'}
+                     </div>
+                 `;
+             }).join('');
+
+             let message = "C'è un pareggio! I seguenti concorrenti si sfideranno in uno spareggio con i dadi. Chi ottiene il punteggio più basso verrà eliminato.";
+             if (tiebreaker.lastResult === 'tie') {
+                 message = "Ancora un pareggio! Si lancia di nuovo tra i concorrenti con il punteggio più basso.";
+             }
+             
+             let playerControls = '<p class="font-bold">Attendi il tuo turno per lanciare...</p>';
+             if (iAmInTiebreaker && myRollInfo && myRollInfo.roll === null) {
+                 playerControls = '<button data-action="playerRollsDice" class="btn">Lancia il Dado!</button>';
+             } else if (iAmInTiebreaker && myRollInfo && myRollInfo.roll !== null) {
+                 playerControls = '<p class="font-bold">Hai lanciato! Attendi gli altri...</p>';
+             } else if (!iAmInTiebreaker) {
+                 playerControls = '<p class="font-bold">Stai assistendo a uno spareggio!</p>';
+             }
+             
+             const hostControls = isHost ? `<button data-action="hostForcesDiceRoll" class="btn bg-orange-500 hover:bg-orange-600 mt-4">Forza Lancio Dadi</button>` : '';
+
+
+             const screenHtml = `
+                 <div class="panel text-center">
+                     <h2 class="font-bangers text-5xl text-red-600 mb-4">SPAREGGIO!</h2>
+                     <p class="text-xl mb-6">${message}</p>
+                     <div class="flex justify-center gap-8 my-8">
+                         ${playersInTiebreakerHtml}
+                     </div>
+                     ${playerControls}
+                     ${hostControls}
+                 </div>
+             `;
+             appContainer.innerHTML = renderWithSidePanels(screenHtml);
+             updateChatView();
+        };
+
+        const renderFinale = () => {
+            const { settings, players, finale } = globalState.gameData;
+            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+            const isHost = globalState.currentUser.uid === globalState.gameData.hostId;
+            const getCharacter = (uid) => {
+                const player = players.find(p => p.uid === uid);
+                return settings.characters[player.characterIndex];
+            };
+
+            const finalist1 = finale.players[0];
+            const finalist2 = finale.players[1];
+            const char1 = getCharacter(finalist1.uid);
+            const char2 = getCharacter(finalist2.uid);
+
+            const currentRound = finale.rounds[finale.rounds.length - 1];
+            const myUid = myPlayer.uid;
+            const iAmInFinale = myUid === finalist1.uid || myUid === finalist2.uid;
+            const canIRoll = iAmInFinale && (
+                (myUid === finalist1.uid && currentRound.roll1 === null) ||
+                (myUid === finalist2.uid && currentRound.roll2 === null)
+            );
+
+            let playerControls = '';
+            if (canIRoll) {
+                playerControls = `<button data-action="playerRollsDiceFinale" class="btn">Lancia il Dado!</button>`;
+            } else if (iAmInFinale) {
+                playerControls = `<p class="font-bold">Hai lanciato! Attendi il tuo avversario...</p>`;
+            } else {
+                playerControls = `<p class="font-bold">Stai assistendo alla finale!</p>`;
+            }
+            
+            const hostControls = isHost ? `<button data-action="hostForcesFinaleRoll" class="btn bg-orange-500 hover:bg-orange-600 mt-4">Forza Lancio</button>` : '';
+
+            const roundsHistoryHtml = finale.rounds.map((round, index) => {
+                if (round.winner === null && round.roll1 === null) return ''; // Non mostrare il round corrente se non è iniziato
+                let resultText = `Round ${index + 1}: In corso...`;
+                if (round.winner && round.winner !== 'tie') {
+                    const winnerName = getCharacter(round.winner).name;
+                    resultText = `Round ${index + 1}: <span class="font-bold text-green-600">${winnerName}</span> vince (${round.roll1} a ${round.roll2})`;
+                } else if (round.roll1 !== null && round.roll2 !== null && round.winner === 'tie') {
+                     resultText = `Round ${index + 1}: Pareggio! (${round.roll1} a ${round.roll2}) Si rilancia!`;
+                }
+                return `<li class="bg-amber-200 p-2 rounded">${resultText}</li>`;
+            }).join('');
+
+            const screenHtml = `
+                <div class="panel text-center">
+                    <h2 class="font-bangers text-6xl text-yellow-400" style="text-shadow: 2px 2px 0 #000;">GRAN FINALE!</h2>
+                    <p class="text-xl mb-6">Il primo che vince 3 round è il campione di A Tutto Reality!</p>
+                    
+                    <div class="flex justify-around items-start my-8">
+                        <!-- Finalista 1 -->
+                        <div class="flex flex-col items-center">
+                            <img src="${char1.img}" class="w-32 h-32 object-cover rounded-full border-4 border-black">
+                            <p class="font-bold text-2xl mt-2">${char1.name}</p>
+                            <p class="font-bangers text-5xl">${finalist1.score}</p>
+                            ${currentRound.roll1 ? `<p class="font-bangers text-4xl text-blue-600">🎲 ${currentRound.roll1}</p>` : ''}
+                        </div>
+                        
+                        <div class="font-bangers text-7xl pt-16">VS</div>
+                        
+                        <!-- Finalista 2 -->
+                        <div class="flex flex-col items-center">
+                            <img src="${char2.img}" class="w-32 h-32 object-cover rounded-full border-4 border-black">
+                            <p class="font-bold text-2xl mt-2">${char2.name}</p>
+                            <p class="font-bangers text-5xl">${finalist2.score}</p>
+                            ${currentRound.roll2 ? `<p class="font-bangers text-4xl text-red-600">🎲 ${currentRound.roll2}</p>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="mt-8">
+                        ${playerControls}
+                        ${hostControls}
+                    </div>
+                    
+                    <div class="mt-8 max-w-md mx-auto">
+                        <h3 class="font-bangers text-3xl mb-2">Storico Round</h3>
+                        <ul class="space-y-2">${roundsHistoryHtml}</ul>
+                    </div>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+        
+        const renderGameOver = () => {
+            const { settings, players, winnerUid } = globalState.gameData;
+            const winnerPlayer = players.find(p => p.uid === winnerUid);
+            const winnerCharacter = settings.characters[winnerPlayer.characterIndex];
+
+            const screenHtml = `
+                <div class="panel text-center fade-in">
+                    <h2 class="font-bangers text-5xl text-amber-500">ABBIAMO UN VINCITORE!</h2>
+                    <img src="${winnerCharacter.img}" class="w-48 h-48 object-cover rounded-full border-8 border-yellow-400 mx-auto my-6 shadow-lg">
+                    <h3 class="font-bangers text-6xl">${winnerCharacter.name}</h3>
+                    <p class="text-2xl font-bold">è il campione di A Tutto Reality: La Sfida Online!</p>
+                    
+                    <div class="mt-8">
+                        ${renderEliminationRanking()}
+                    </div>
+
+                    <button data-action="goToMainMenu" class="btn bg-blue-500 hover:bg-blue-600 mt-8">Torna al Menu Principale</button>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+
+        // --- LOGICA DI GIOCO E GESTIONE EVENTI ---
+        
+        const preGameAction = (action, id = null) => {
+            const nicknameInput = document.getElementById('nickname-input');
+            const nickname = nicknameInput ? nicknameInput.value.trim() : globalState.nickname;
+
+            if (!nickname) {
+                showModal("Per favore, inserisci un nickname per continuare.");
+                return;
+            }
+            globalState.nickname = nickname;
+
+            switch (action) {
+                case 'goToCreateGame': globalState.currentScreen = 'createGame'; render(); break;
+                case 'goToJoinGame': globalState.currentScreen = 'joinGame'; render(); break;
+                case 'goToFindGame': globalState.currentScreen = 'findGame'; render(); break;
+                case 'joinWithId': joinGame(id); break;
+            }
+        };
+
+        const handleAppClick = (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+
+            const { action, id, index, uid } = target.dataset;
+
+            // Gestione azioni pre-partita
+            const preGameActions = ['goToCreateGame', 'goToJoinGame', 'goToFindGame', 'joinWithId'];
+            if (preGameActions.includes(action)) {
+                preGameAction(action, id);
+                return;
+            }
+
+            // Gestione azioni in-partita
+            switch (action) {
+                case 'goToMainMenu': leaveGameCleanup(); break;
+                case 'addCharacter': addCharacterRow(); break;
+                case 'removeCharacter': target.closest('.character-row').remove(); break;
+                case 'startGame': startGame(); break;
+                case 'testFinale': testFinale(); break;
+                case 'leaveGame': leaveGame(); break;
+                case 'selectCharacter': if (!target.classList.contains('selected-by-other')) selectCharacter(index); break;
+                case 'runChallenge': runChallenge(); break;
+                case 'goToElimination': goToElimination(); break;
+                case 'votePlayer': submitVote(uid); break;
+                case 'startVoteReveal': startVoteReveal(); break;
+                case 'revealNextSafe': revealNextSafe(); break;
+                case 'nextEpisode': nextEpisode(); break;
+                case 'playerRollsDice': playerRollsDice(); break;
+                case 'hostForcesDiceRoll': hostForcesDiceRoll(); break;
+                case 'playerRollsDiceFinale': playerRollsDiceFinale(); break;
+                case 'hostForcesFinaleRoll': hostForcesFinaleRoll(); break;
+            }
+        };
+
+        const handleAppSubmit = (e) => {
+            e.preventDefault();
+            const formId = e.target.id;
+            if (formId === 'create-game-form') createGame();
+            else if (formId === 'join-game-form') {
+                const code = document.getElementById('game-code').value.toUpperCase();
+                if (code) joinGame(code);
+            } else if (formId === 'chat-form') {
+                handleSendMessage();
+            }
+        };
+
+        const updateTeamConfigs = () => {
+            const teamCount = parseInt(document.getElementById('team-count').value) || 2;
+            const container = document.getElementById('team-configs');
+            container.innerHTML = '';
+            for (let i = 1; i <= teamCount; i++) {
+                const div = document.createElement('div');
+                div.innerHTML = `<label class="font-bold">Nome Team ${i}:</label><input type="text" class="team-name w-full p-2 border-2 border-black rounded" value="Team ${i}">`;
+                container.appendChild(div);
+            }
+        };
+
+        const updateReturnEpisodes = () => {
+            const returnCount = parseInt(document.getElementById('return-count').value) || 0;
+            const container = document.getElementById('return-episodes');
+            container.innerHTML = '';
+            for (let i = 1; i <= returnCount; i++) {
+                const div = document.createElement('div');
+                div.innerHTML = `<label class="font-bold">Episodio Ritorno ${i}:</label><input type="number" class="return-episode w-full p-2 border-2 border-black rounded" value="${3 + i*2}">`;
+                container.appendChild(div);
+            }
+        };
+
+        const addCharacterRow = (index = null, pool = FULL_CHARACTER_POOL) => {
+            const list = document.getElementById('characters-list');
+            const charIndex = index !== null ? index : list.children.length;
+            const defaultChar = pool[charIndex] || { name: `Personaggio ${charIndex + 1}`, img: '' };
+            
+            const div = document.createElement('div');
+            div.className = 'character-row grid grid-cols-1 md:grid-cols-6 gap-2 items-center';
+            div.innerHTML = `
+                <input type="text" placeholder="Nome Personaggio" class="character-name w-full p-2 border-2 border-black rounded md:col-span-2" value="${defaultChar.name}">
+                <input type="text" placeholder="URL Immagine (obbligatorio)" class="character-img-url w-full p-2 border-2 border-black rounded md:col-span-3" value="${defaultChar.img}">
+                <button type="button" data-action="removeCharacter" class="btn bg-red-500 hover:bg-red-600 text-sm py-1 px-2 justify-self-start md:justify-self-center">X</button>
+            `;
+            list.appendChild(div);
+        };
+
+        const createGame = async () => {
+            try {
+                const characterRows = document.querySelectorAll('.character-row');
+                const characters = Array.from(characterRows).map((row, index) => {
+                    const nameInput = row.querySelector('.character-name');
+                    const urlInput = row.querySelector('.character-img-url');
+                    const name = nameInput.value.trim() || `Personaggio ${index + 1}`;
+                    const img = urlInput.value.trim();
+                    if (!img) {
+                        throw new Error(`L'immagine per il personaggio "${name}" è obbligatoria.`);
+                    }
+                    return { name, img };
+                });
+
+                const settings = {
+                    playerCount: parseInt(document.getElementById('player-count').value),
+                    teamCount: parseInt(document.getElementById('team-count').value),
+                    teams: Array.from(document.querySelectorAll('.team-name')).map((input, i) => ({ id: i + 1, name: input.value.trim() || `Team ${i + 1}`, color: `team-color-${i + 1}` })),
+                    mergeEpisode: parseInt(document.getElementById('merge-episode').value),
+                    returnCount: parseInt(document.getElementById('return-count').value),
+                    returnEpisodes: Array.from(document.querySelectorAll('.return-episode')).map(input => parseInt(input.value)),
+                    characters: characters,
+                };
+
+                const newGameId = generateId();
+                const hostPlayer = {
+                    uid: globalState.currentUser.uid,
+                    name: globalState.nickname,
+                    isHost: true,
+                    characterIndex: null,
+                };
+
+                const gameData = {
+                    id: newGameId,
+                    hostId: globalState.currentUser.uid,
+                    status: 'waiting',
+                    players: [hostPlayer],
+                    settings,
+                    episode: 1,
+                    eliminationOrder: [],
+                    isMerged: false,
+                    createdAt: new Date(),
+                };
+            
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, newGameId);
+                await setDoc(gameRef, gameData);
+                joinGame(newGameId);
+
+            } catch (error) {
+                console.error("Errore dettagliato nella creazione della partita:", error);
+                showModal(error.message || "Impossibile creare la partita. Controlla che tutti i campi siano corretti.");
+            }
+        };
+
+        const joinGame = async (gameId) => {
+            if (!gameId) { showModal("Codice non valido."); return; }
+            if (!globalState.nickname) { showModal("Per favore, torna al menu e inserisci un nickname."); return; }
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
+            try {
+                const gameDoc = await getDoc(gameRef);
+                if (!gameDoc.exists()) { showModal(`Partita con codice ${gameId} non trovata.`); return; }
+                
+                let gameData = gameDoc.data();
+                const myUid = globalState.currentUser.uid;
+
+                if (!gameData.players.some(p => p.uid === myUid)) {
+                    if (gameData.players.length >= gameData.settings.playerCount) { showModal("Questa partita è piena!"); return; }
+                    if (gameData.status !== 'waiting') { showModal("Questa partita è già iniziata!"); return; }
+
+                    const newPlayer = {
+                        uid: myUid,
+                        name: globalState.nickname,
+                        isHost: false,
+                        characterIndex: null,
+                    };
+                    await updateDoc(gameRef, { players: [...gameData.players, newPlayer] });
+                }
+                
+                globalState.gameId = gameId;
+                
+                if (globalState.unsubscribeGame) globalState.unsubscribeGame();
+                globalState.unsubscribeGame = onSnapshot(gameRef, (doc) => {
+                    if (doc.exists()) {
+                        const oldStatus = globalState.gameData ? globalState.gameData.status : null;
+                        globalState.gameData = doc.data();
+                        const newStatus = globalState.gameData.status;
+
+                        if (oldStatus !== 'tiebreaker' && newStatus === 'tiebreaker' && globalState.gameData.hostId === globalState.currentUser.uid) {
+                            rollCpuDiceInTiebreaker();
+                        }
+                        
+                        if (oldStatus !== 'finale' && newStatus === 'finale' && globalState.gameData.hostId === globalState.currentUser.uid) {
+                            setTimeout(checkFinaleCompletion, 1000);
+                        }
+
+                        const newScreen = getScreenFromStatus(newStatus);
+                        if(globalState.currentScreen !== newScreen){
+                            globalState.currentScreen = newScreen;
+                            render();
+                        } else {
+                            const screenContainer = document.getElementById('screen-container');
+                            if(screenContainer) render();
+                        }
+                    } else {
+                        showModal("La partita non esiste più.");
+                        leaveGameCleanup();
+                    }
+                });
+                
+                if (globalState.unsubscribeChat) globalState.unsubscribeChat();
+                const chatRef = collection(db, `artifacts/${appId}/public/data/games`, gameId, 'chat');
+                const q = query(chatRef, orderBy("timestamp"));
+                globalState.unsubscribeChat = onSnapshot(q, (snapshot) => {
+                    globalState.chatMessages = snapshot.docs.map(doc => doc.data());
+                    updateChatView();
+                });
+
+            } catch (error) {
+                showModal("Impossibile unirsi alla partita. Riprova.");
+            }
+        };
+        
+        const leaveGame = async () => {
+            if (!globalState.gameId || !globalState.currentUser) return;
+            
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            
+            try {
+                const gameDoc = await getDoc(gameRef);
+                if (!gameDoc.exists()) {
+                    leaveGameCleanup();
+                    return;
+                }
+                
+                const gameData = gameDoc.data();
+                const updatedPlayers = gameData.players.filter(p => p.uid !== globalState.currentUser.uid);
+                
+                if (updatedPlayers.length === 0) {
+                    // Se l'ultimo giocatore esce, cancella la partita
+                    await deleteDoc(gameRef);
+                } else {
+                    // Se l'host esce, nomina un nuovo host
+                    if (gameData.hostId === globalState.currentUser.uid) {
+                        const newHost = updatedPlayers.find(p => !p.isCpu) || updatedPlayers[0];
+                        if (newHost) {
+                            await updateDoc(gameRef, { players: updatedPlayers, hostId: newHost.uid });
+                        }
+                    } else {
+                         await updateDoc(gameRef, { players: updatedPlayers });
+                    }
+                }
+            } catch (error) {
+                 console.error("Errore nell'uscire dalla partita:", error);
+            } finally {
+                 leaveGameCleanup();
+            }
+        };
+
+        const leaveGameCleanup = () => {
+            if(globalState.unsubscribeGame) globalState.unsubscribeGame();
+            if(globalState.unsubscribeChat) globalState.unsubscribeChat();
+            globalState.gameId = null;
+            globalState.gameData = null;
+            globalState.chatMessages = [];
+            globalState.unsubscribeGame = null;
+            globalState.unsubscribeChat = null;
+            globalState.currentScreen = 'mainMenu';
+            render();
+        };
+        
+        const getScreenFromStatus = (status) => {
+            switch(status){
+                case 'waiting': return 'lobby';
+                case 'character-selection': return 'characterSelection';
+                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'reveal_in_progress': case 'revealed': case 'tiebreaker': case 'finale': case 'game_over': return 'game';
+                default: return 'mainMenu';
+            }
+        };
+        
+        const handleSendMessage = async () => {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (text === '' || !globalState.gameId) return;
+
+            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
+            if (!myPlayer) return;
+
+            const chatRef = collection(db, `artifacts/${appId}/public/data/games`, globalState.gameId, 'chat');
+            try {
+                await addDoc(chatRef, {
+                    senderId: myPlayer.uid,
+                    senderName: myPlayer.name,
+                    text: text,
+                    timestamp: serverTimestamp()
+                });
+                input.value = '';
+            } catch (error) {
+                showModal("Impossibile inviare il messaggio.");
+            }
+        };
+
+        const startGame = async () => {
+            if (!globalState.gameId) return;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            
+            const { players, settings } = globalState.gameData;
+            const playersNeeded = settings.playerCount - players.length;
+            const newCpuPlayers = [];
+            for(let i=0; i < playersNeeded; i++){
+                newCpuPlayers.push({
+                    uid: `CPU-${generateId(8)}`,
+                    name: `CPU ${i+1}`,
+                    isCpu: true,
+                    characterIndex: null,
+                });
+            }
+            const allPlayers = [...players, ...newCpuPlayers];
+
+            await updateDoc(gameRef, { status: 'character-selection', players: allPlayers });
+        };
+
+        const testFinale = async () => {
+            if (!globalState.gameId) return;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            
+            const { players, settings } = globalState.gameData;
+            
+            // Aggiungi CPU se non ci sono abbastanza giocatori
+            const playersNeeded = settings.playerCount - players.length;
+            const allPlayers = [...players];
+             for(let i=0; i < playersNeeded; i++){
+                allPlayers.push({
+                    uid: `CPU-${generateId(8)}`,
+                    name: `CPU ${i+1}`,
+                    isCpu: true,
+                    characterIndex: null,
+                });
+            }
+
+            // Assegna personaggi a tutti
+            let availableIndexes = settings.characters.map((_, i) => i);
+            allPlayers.forEach(p => {
+                if (p.characterIndex === null) {
+                    const randomIndex = Math.floor(Math.random() * availableIndexes.length);
+                    p.characterIndex = availableIndexes.splice(randomIndex, 1)[0];
+                }
+            });
+            
+            const finalists = allPlayers.slice(0, 2);
+            if (finalists.length < 2) {
+                showModal("Servono almeno 2 giocatori per testare la finale.");
+                return;
+            }
+
+            const updatedPlayers = allPlayers.map(p => {
+                if (finalists.some(f => f.uid === p.uid)) {
+                    return { ...p, status: 'active' };
+                }
+                return { ...p, status: 'eliminated' };
+            });
+
+            await updateDoc(gameRef, {
+                status: 'finale',
+                players: updatedPlayers,
+                isMerged: true, // La finale è sempre post-merge
+                finale: {
+                    players: finalists.map(p => ({ uid: p.uid, score: 0 })),
+                    rounds: [{ roll1: null, roll2: null, winner: null }]
+                }
+            });
+        };
+
+        const selectCharacter = async (charIndexStr) => {
+            const charIndex = parseInt(charIndexStr);
+            if(isNaN(charIndex)) return;
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const myUid = globalState.currentUser.uid;
+            
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+
+            if(gameData.players.some(p => p.characterIndex === charIndex)) {
+                showModal("Questo personaggio è già stato scelto!");
+                return;
+            }
+
+            const updatedPlayers = gameData.players.map(p => p.uid === myUid ? { ...p, characterIndex: charIndex } : p);
+            await updateDoc(gameRef, { players: updatedPlayers });
+            checkAllCharactersSelected();
+        };
+
+        const checkAllCharactersSelected = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+             if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+
+            const humanPlayers = gameData.players.filter(p => !p.isCpu);
+            if (humanPlayers.every(p => p.characterIndex !== null)) {
+                let availableIndexes = gameData.settings.characters.map((_, i) => i).filter(i => !gameData.players.some(p => p.characterIndex === i));
+                
+                const finalPlayers = gameData.players.map(p => {
+                    if (p.isCpu && p.characterIndex === null) {
+                        const randomIndex = Math.floor(Math.random() * availableIndexes.length);
+                        p.characterIndex = availableIndexes.splice(randomIndex, 1)[0];
+                    }
+                    return p;
+                });
+
+                assignTeams(finalPlayers, gameData.settings.teams);
+                await updateDoc(gameRef, { status: 'challenge', players: finalPlayers, teams: gameData.settings.teams });
+            }
+        };
+
+        const assignTeams = (players, teams) => {
+            const shuffledPlayers = [...players].sort(() => 0.5 - Math.random());
+            const teamSlots = [];
+            const playerCount = players.length;
+            const teamCount = teams.length;
+
+            for (let i = 0; i < playerCount; i++) {
+                teamSlots.push(teams[i % teamCount].id);
+            }
+            
+            for (let i = teamSlots.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [teamSlots[i], teamSlots[j]] = [teamSlots[j], teamSlots[i]];
+            }
+
+            shuffledPlayers.forEach((player, index) => {
+                player.teamId = teamSlots[index];
+                player.status = 'active';
+            });
+        };
+
+        const runChallenge = async () => {
+            const { teams, isMerged } = globalState.gameData;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+
+            if (isMerged) {
+                await updateDoc(gameRef, { status: 'elimination', votes: {} });
+            } else {
+                const teamIds = teams.map(t => t.id);
+                const losingTeamIndex = Math.floor(Math.random() * teamIds.length);
+                const losingTeamId = teamIds[losingTeamIndex];
+                const winningTeamIds = teamIds.filter(id => id !== losingTeamId);
+                await updateDoc(gameRef, { status: 'challenge_result', challengeResult: { winningTeamIds, losingTeamId } });
+            }
+        };
+        
+        const goToElimination = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+            
+            const { players, challengeResult } = gameData;
+            const atRiskPlayers = players.filter(p => 
+                p.status === 'active' && 
+                p.teamId === challengeResult.losingTeamId
+            );
+
+            if (atRiskPlayers.length === 1) {
+                // Eliminazione automatica
+                const eliminatedUid = atRiskPlayers[0].uid;
+                const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+                const eliminationOrder = [...(gameData.eliminationOrder || []), eliminatedUid];
+                await updateDoc(gameRef, {
+                    status: 'revealed',
+                    players: updatedPlayers,
+                    elimination: { eliminatedUid, voteCounts: { [eliminatedUid]: 'Auto-eliminato' } },
+                    eliminationOrder
+                });
+                return;
+            }
+
+            await updateDoc(gameRef, { status: 'elimination', votes: {} });
+
+            const updatedGameDoc = await getDoc(gameRef);
+            const updatedGameData = updatedGameDoc.data();
+            const updatedAtRisk = updatedGameData.players.filter(p => 
+                p.status === 'active' && 
+                p.teamId === updatedGameData.challengeResult.losingTeamId
+            );
+
+            const hasHumanVoters = updatedAtRisk.some(p => !p.isCpu);
+
+            if (!hasHumanVoters && updatedAtRisk.length > 0) {
+                const newVotes = {};
+                updatedAtRisk.forEach(voter => {
+                    const potentialTargets = updatedAtRisk.filter(p => p.uid !== voter.uid);
+                    if (potentialTargets.length > 0) {
+                        const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        newVotes[voter.uid] = target.uid;
+                    }
+                });
+                
+                await updateDoc(gameRef, { votes: newVotes, status: 'reveal' });
+            }
+        };
+
+        const submitVote = async (votedPlayerUid) => {
+            const { players, challengeResult, isMerged } = globalState.gameData;
+            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+
+            if (myPlayer.status === 'eliminated') {
+                showModal("Non puoi votare, sei stato eliminato!");
+                return;
+            }
+            
+            if (!isMerged && myPlayer.teamId !== challengeResult.losingTeamId) {
+                showModal("Non puoi votare, il tuo team è salvo!");
+                return;
+            }
+
+            const myUid = globalState.currentUser.uid;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { [`votes.${myUid}`]: votedPlayerUid });
+            checkAllVotesIn();
+        };
+
+        const checkAllVotesIn = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+
+            const { players, challengeResult, votes, isMerged, immunePlayerUid } = gameData;
+            
+            let voters;
+            if (isMerged) {
+                voters = players.filter(p => p.status === 'active');
+            } else {
+                voters = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
+            }
+
+            const batch = writeBatch(db);
+            let cpuVoted = false;
+            voters.forEach(voter => {
+                if (voter.isCpu && !votes[voter.uid]) {
+                    let potentialTargets;
+                    if (isMerged) {
+                        potentialTargets = players.filter(p => p.status === 'active' && p.uid !== voter.uid && p.uid !== immunePlayerUid);
+                    } else {
+                        potentialTargets = players.filter(p => p.status === 'active' && p.teamId === voter.teamId && p.uid !== voter.uid);
+                    }
+                    if (potentialTargets.length > 0) {
+                        const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        batch.update(gameRef, { [`votes.${voter.uid}`]: target.uid });
+                        cpuVoted = true;
+                    }
+                }
+            });
+            if (cpuVoted) await batch.commit();
+
+            const finalDoc = await getDoc(gameRef);
+            const finalData = finalDoc.data();
+            let finalVoters;
+            if (isMerged) {
+                finalVoters = finalData.players.filter(p => p.status === 'active');
+            } else {
+                finalVoters = finalData.players.filter(p => p.status === 'active' && finalData.challengeResult.losingTeamId === p.teamId);
+            }
+
+            if (finalVoters.length === Object.keys(finalData.votes).length) {
+                await updateDoc(gameRef, { status: 'reveal' });
+            }
+        };
+
+        const startVoteReveal = async () => {
+            const { players, votes, challengeResult, isMerged } = globalState.gameData;
+            
+            let atRiskPlayers;
+            if (isMerged) {
+                atRiskPlayers = players.filter(p => p.status === 'active');
+            } else {
+                atRiskPlayers = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
+            }
+            
+            const voteCounts = {};
+            atRiskPlayers.forEach(p => voteCounts[p.uid] = 0); 
+
+            for(const voterUid in votes) {
+                const votedUid = votes[voterUid];
+                if(voteCounts.hasOwnProperty(votedUid)) {
+                    voteCounts[votedUid]++;
+                }
+            }
+            
+            const maxVotes = Math.max(...Object.values(voteCounts));
+            const tiedPlayersUids = Object.keys(voteCounts).filter(uid => voteCounts[uid] === maxVotes);
+
+            if (tiedPlayersUids.length > 1 && maxVotes > 0) {
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+                await updateDoc(gameRef, {
+                    status: 'tiebreaker',
+                    tiebreaker: {
+                        players: tiedPlayersUids.map(uid => ({ uid, roll: null })),
+                        lastResult: null
+                    }
+                });
+                return;
+            }
+
+            const sortedAtRiskUids = atRiskPlayers.map(p => p.uid).sort((a, b) => voteCounts[a] - voteCounts[b]);
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, {
+                status: 'reveal_in_progress',
+                elimination: {
+                    atRisk: sortedAtRiskUids,
+                    safePlayers: [],
+                    voteCounts: voteCounts,
+                    eliminatedUid: null
+                }
+            });
+            revealNextSafe();
+        };
+
+        const revealNextSafe = async () => {
+            const { elimination, players } = globalState.gameData;
+            const atRiskUids = elimination.atRisk;
+            const safePlayers = elimination.safePlayers;
+
+            if (atRiskUids.length - safePlayers.length <= 1) {
+                const eliminatedUid = atRiskUids.find(uid => !safePlayers.includes(uid));
+                const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+                const eliminationOrder = [...(globalState.gameData.eliminationOrder || []), eliminatedUid];
+                
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+                await updateDoc(gameRef, {
+                    status: 'revealed',
+                    players: updatedPlayers,
+                    'elimination.eliminatedUid': eliminatedUid,
+                    eliminationOrder: eliminationOrder
+                });
+            } else {
+                const nextSafeUid = atRiskUids[safePlayers.length];
+                const updatedSafePlayers = [...safePlayers, nextSafeUid];
+                
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+                await updateDoc(gameRef, {
+                    'elimination.safePlayers': updatedSafePlayers
+                });
+            }
+        };
+
+        const playerRollsDice = async () => {
+            const { tiebreaker } = globalState.gameData;
+            const myUid = globalState.currentUser.uid;
+            
+            const myTieInfo = tiebreaker.players.find(p => p.uid === myUid);
+            if (!myTieInfo || myTieInfo.roll !== null) return;
+
+            const newRoll = Math.floor(Math.random() * 6) + 1;
+            const updatedTiePlayers = tiebreaker.players.map(p => p.uid === myUid ? { ...p, roll: newRoll } : p);
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'tiebreaker.players': updatedTiePlayers });
+
+            checkTiebreakerCompletion();
+        };
+
+        const rollCpuDiceInTiebreaker = async () => {
+            const { players, tiebreaker } = globalState.gameData;
+            if (!tiebreaker) return;
+
+            const batch = writeBatch(db);
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            let cpusRolled = false;
+
+            const updatedTiePlayers = tiebreaker.players.map(pInfo => {
+                const player = players.find(p => p.uid === pInfo.uid);
+                if (player.isCpu && pInfo.roll === null) {
+                    cpusRolled = true;
+                    return { ...pInfo, roll: Math.floor(Math.random() * 6) + 1 };
+                }
+                return pInfo;
+            });
+
+            if (cpusRolled) {
+                batch.update(gameRef, { 'tiebreaker.players': updatedTiePlayers });
+                await batch.commit();
+                checkTiebreakerCompletion();
+            }
+        };
+
+        const checkTiebreakerCompletion = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const { players, tiebreaker } = gameDoc.data();
+
+            if (tiebreaker.players.every(p => p.roll !== null)) {
+                const minRoll = Math.min(...tiebreaker.players.map(p => p.roll));
+                const losers = tiebreaker.players.filter(p => p.roll === minRoll);
+
+                if (losers.length === 1) {
+                    const eliminatedUid = losers[0].uid;
+                    const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+                    const eliminationOrder = [...(globalState.gameData.eliminationOrder || []), eliminatedUid];
+
+                    await updateDoc(gameRef, {
+                        status: 'revealed',
+                        players: updatedPlayers,
+                        elimination: { eliminatedUid: eliminatedUid, voteCounts: { [eliminatedUid]: 'Spareggio' } },
+                        tiebreaker: null,
+                        eliminationOrder: eliminationOrder
+                    });
+                } else {
+                    await updateDoc(gameRef, {
+                        'tiebreaker.players': losers.map(p => ({ uid: p.uid, roll: null })),
+                        'tiebreaker.lastResult': 'tie'
+                    });
+                     if (globalState.gameData.hostId === globalState.currentUser.uid) {
+                         setTimeout(rollCpuDiceInTiebreaker, 1000);
+                    }
+                }
+            }
+        };
+
+        const hostForcesDiceRoll = async () => {
+            const { tiebreaker } = globalState.gameData;
+            if (!tiebreaker) return;
+
+            const updatedTiePlayers = tiebreaker.players.map(pInfo => {
+                if (pInfo.roll === null) {
+                    return { ...pInfo, roll: Math.floor(Math.random() * 6) + 1 };
+                }
+                return pInfo;
+            });
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'tiebreaker.players': updatedTiePlayers });
+
+            checkTiebreakerCompletion();
+        };
+        
+        const nextEpisode = async () => {
+            const { settings, episode, players, eliminationOrder } = globalState.gameData;
+            const newEpisodeNumber = episode + 1;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const activePlayers = players.filter(p => p.status === 'active');
+
+            if (activePlayers.length <= 2) {
+                await updateDoc(gameRef, {
+                    status: 'finale',
+                    finale: {
+                        players: activePlayers.map(p => ({ uid: p.uid, score: 0 })),
+                        rounds: [{ roll1: null, roll2: null, winner: null }]
+                    }
+                });
+                return;
+            }
+
+            if (settings.returnEpisodes && settings.returnEpisodes.includes(newEpisodeNumber)) {
+                const eliminatedPlayers = players.filter(p => p.status === 'eliminated');
+                if (eliminatedPlayers.length > 0) {
+                    const returningPlayer = eliminatedPlayers[Math.floor(Math.random() * eliminatedPlayers.length)];
+                    const updatedPlayers = players.map(p => p.uid === returningPlayer.uid ? { ...p, status: 'active' } : p);
+                    const updatedEliminationOrder = eliminationOrder.filter(uid => uid !== returningPlayer.uid);
+
+                    await updateDoc(gameRef, {
+                        status: 'return_result',
+                        players: updatedPlayers,
+                        eliminationOrder: updatedEliminationOrder,
+                        returningPlayerUid: returningPlayer.uid
+                    });
+                    setTimeout(() => nextEpisode(), 5000);
+                    return;
+                }
+            }
+            
+            if (newEpisodeNumber === settings.mergeEpisode) {
+                    const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+                    await updateDoc(gameRef, {
+                        status: 'challenge',
+                        episode: newEpisodeNumber,
+                        isMerged: true,
+                        immunePlayerUid: immunePlayer.uid,
+                        challengeResult: null, 
+                        elimination: null, 
+                        tiebreaker: null,
+                        votes: {} 
+                    });
+                    return;
+            }
+
+            if (globalState.gameData.isMerged) {
+                const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+                await updateDoc(gameRef, {
+                    status: 'challenge',
+                    episode: newEpisodeNumber,
+                    immunePlayerUid: immunePlayer.uid,
+                    challengeResult: null, 
+                    elimination: null, 
+                    tiebreaker: null,
+                    votes: {} 
+                });
+                return;
+            }
+
+            await updateDoc(gameRef, { 
+                status: 'challenge', 
+                episode: newEpisodeNumber, 
+                challengeResult: null, 
+                elimination: null, 
+                tiebreaker: null,
+                votes: {} 
+            });
+        };
+        
+        const playerRollsDiceFinale = async () => {
+            const { finale } = globalState.gameData;
+            const myUid = globalState.currentUser.uid;
+            const currentRound = finale.rounds[finale.rounds.length - 1];
+
+            const myFinalistInfo = finale.players.find(p => p.uid === myUid);
+            if (!myFinalistInfo) return;
+
+            const isPlayer1 = finale.players[0].uid === myUid;
+            if ((isPlayer1 && currentRound.roll1 !== null) || (!isPlayer1 && currentRound.roll2 !== null)) {
+                return;
+            }
+            
+            const newRoll = Math.floor(Math.random() * 6) + 1;
+            const updatedRounds = [...finale.rounds];
+            const newCurrentRound = updatedRounds[updatedRounds.length - 1];
+
+            if (isPlayer1) {
+                newCurrentRound.roll1 = newRoll;
+            } else {
+                newCurrentRound.roll2 = newRoll;
+            }
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'finale.rounds': updatedRounds });
+
+            checkFinaleCompletion();
+        };
+
+        const checkFinaleCompletion = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+            if (!gameData.finale) return;
+            const { players, finale } = gameData;
+
+            const currentRound = finale.rounds[finale.rounds.length - 1];
+            
+            const finalist1 = players.find(p => p.uid === finale.players[0].uid);
+            const finalist2 = players.find(p => p.uid === finale.players[1].uid);
+
+            let cpuRolled = false;
+            const updatedRounds = [...finale.rounds];
+            const newCurrentRound = updatedRounds[updatedRounds.length - 1];
+
+            if (finalist1.isCpu && newCurrentRound.roll1 === null) {
+                newCurrentRound.roll1 = Math.floor(Math.random() * 6) + 1;
+                cpuRolled = true;
+            }
+            if (finalist2.isCpu && newCurrentRound.roll2 === null) {
+                newCurrentRound.roll2 = Math.floor(Math.random() * 6) + 1;
+                cpuRolled = true;
+            }
+            
+            if (cpuRolled) {
+                await updateDoc(gameRef, { 'finale.rounds': updatedRounds });
+                setTimeout(checkFinaleCompletion, 500); 
+                return;
+            }
+
+            if (newCurrentRound.roll1 !== null && newCurrentRound.roll2 !== null) {
+                let updatedFinale = { ...finale };
+                
+                if (newCurrentRound.roll1 > newCurrentRound.roll2) {
+                    newCurrentRound.winner = finale.players[0].uid;
+                    updatedFinale.players[0].score++;
+                } else if (newCurrentRound.roll2 > newCurrentRound.roll1) {
+                    newCurrentRound.winner = finale.players[1].uid;
+                    updatedFinale.players[1].score++;
+                } else {
+                    newCurrentRound.winner = 'tie';
+                }
+                
+                updatedFinale.rounds[updatedFinale.rounds.length - 1] = newCurrentRound;
+
+                const winner = updatedFinale.players.find(p => p.score >= 3);
+                if (winner) {
+                    await updateDoc(gameRef, {
+                        status: 'game_over',
+                        winnerUid: winner.uid,
+                        finale: updatedFinale
+                    });
+                } else {
+                    updatedFinale.rounds.push({ roll1: null, roll2: null, winner: null });
+                    await updateDoc(gameRef, { finale: updatedFinale });
+                    setTimeout(checkFinaleCompletion, 1000);
+                }
+            }
+        };
+
+        const hostForcesFinaleRoll = async () => {
+            const { finale } = globalState.gameData;
+            const updatedRounds = [...finale.rounds];
+            const currentRound = updatedRounds[updatedRounds.length - 1];
+
+            if (currentRound.roll1 === null) {
+                currentRound.roll1 = Math.floor(Math.random() * 6) + 1;
+            }
+            if (currentRound.roll2 === null) {
+                currentRound.roll2 = Math.floor(Math.random() * 6) + 1;
+            }
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'finale.rounds': updatedRounds });
+            checkFinaleCompletion();
+        };
+
+        // --- INIZIALIZZAZIONE ---
+        const init = async () => {
+            if (!app) {
+                renderLoading();
+                appContainer.innerHTML = `<div class="panel text-center"><h2 class="font-bangers text-4xl text-red-600">Errore di Configurazione</h2><p class="mt-4">Impossibile inizializzare Firebase. Assicurati di aver inserito le tue credenziali nel campo <strong>firebaseConfig</strong> all'interno del codice HTML.</p></div>`;
+                return;
+            }
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    globalState.currentUser = user;
+                } else {
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (error) {
+                        console.error("Authentication failed:", error);
+                        showModal("Autenticazione fallita. L'app potrebbe non funzionare correttamente.");
+                    }
+                }
+                
+                if (globalState.currentScreen === 'loading') {
+                    globalState.currentScreen = 'mainMenu';
+                    render();
+                }
+            });
+        };
+
+        appContainer.addEventListener('click', handleAppClick);
+        appContainer.addEventListener('submit', handleAppSubmit);
+        init();
+    </script>
+</body>
+</html>                   

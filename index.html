@@ -60,7 +60,8 @@
           onSnapshot, 
           arrayUnion,
           serverTimestamp,
-          deleteDoc
+          deleteDoc,
+          getDocs // Importato getDocs per la pulizia
         } from 'firebase/firestore';
         import { 
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
@@ -102,6 +103,8 @@
         const appId = getAppId();
 
         // --- COSTANTI ---
+        const TEN_MINUTES_MS = 10 * 60 * 1000;
+        
         const SEASON_CONFIG = [
           { name: "L'Isola", bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073&auto=format&fit=crop", theme: "Spiaggia" },
           { name: "Azione", bg: "https://images.unsplash.com/photo-1478720568477-152d9b164e63?q=80&w=2000&auto=format&fit=crop", theme: "Cinema" },
@@ -193,12 +196,31 @@
 		  { name: "Mordecai", img: "https://i.pinimg.com/736x/4f/2e/04/4f2e04cace599c4433a84b490d12c2a4.jpg" },
 		  { name: "Rigby", img: "https://i.pinimg.com/736x/dd/7d/18/dd7d18fad1de3125ac14554e42f4d55f.jpg" },
 		  { name: "Superboy", img: "https://i.pinimg.com/1200x/70/d3/45/70d345e2d54b002fbc96b4ae8aa255e5.jpg" },
+		  { name: "Miss Martian", img: "https://i.pinimg.com/1200x/f9/8c/75/f98c75467a5002ad20a36272cfe9faa1.jpg" },
+		  { name: "Zatanna", img: "https://i.pinimg.com/1200x/c9/9f/59/c99f5937cc6afce81e3298a007468992.jpg" },
 		  { name: "Draculaura", img: "https://i.pinimg.com/236x/49/d8/23/49d823b49c0621162712fb43dd5bf002.jpg" },
 		  { name: "Clawdeen", img: "https://i.pinimg.com/736x/fe/cb/1c/fecb1c67924cd56bb01e19deb12294f1.jpg" },
 		  { name: "Frankie", img: "https://i.pinimg.com/736x/c0/ae/bb/c0aebba7d0b329e4a8e26f92d36a857a.jpg" },
 		  { name: "Shego", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
 		  { name: "Ariana Grande", img: "https://media.tenor.com/1u94p6qR01gAAAAM/ariana-grande-eternal-sunshine.gif" },
-          { name: "Ben 10", img: "https://i.pinimg.com/736x/b3/c8/eb/b3c8ebedc4123fa33f6e72ff2deff109.jpg" },
+		  { name: "Will", img: "https://i.pinimg.com/originals/88/80/73/8880736b5695844044e0e38c8063a1ff.gif" },
+		  { name: "Carlos Oliveira", img: "https://i.pinimg.com/originals/32/0d/d1/320dd13031f1aba8a2d3d9b9837174f4.gif" },
+		  { name: "Leon", img: "https://i.pinimg.com/736x/db/ef/fc/dbeffc6e915a929f7dbe908390f5af42.jpg" },
+		  { name: "Spongebob", img: "https://i.pinimg.com/originals/4c/74/21/4c742132b3f7018e49ae1901a2ab3e68.gif" },
+		  { name: "Patrick", img: "https://i.pinimg.com/736x/cc/45/b5/cc45b504e5bba418a3621d894a7693d6.jpg" },
+		  { name: "Squiddi", img: "https://i.pinimg.com/originals/bb/9a/08/bb9a082dd1a1a8f49200b8f5e5392d23.gif" },
+		  { name: "Alvin", img: "https://i.pinimg.com/1200x/42/b1/da/42b1da0676938e04cfcd2d16ae13e067.jpg" },
+		  { name: "Poison Ivy", img: "https://media.tenor.com/1u94p6qR01gAAAAM/ariana-grande-eternal-sunshine.gif" },
+          { name: "Sonic", img: "https://i.pinimg.com/1200x/4f/22/d2/4f22d2cd449a419b3859197438300dd2.jpg" },
+		  { name: "Tails", img: "https://i.pinimg.com/736x/cb/f8/43/cbf84308cca2de1d9a776410716c6aee.jpg" },
+		  { name: "Dr Eggman", img: "https://i.pinimg.com/736x/ca/6a/ec/ca6aec757d82fbd5498fc2f5322ffc2c.jpg" },
+		  { name: "Scar", img: "https://i.pinimg.com/736x/4b/cc/0e/4bcc0e93c7086f7359c3e99fea022cd6.jpg" },
+		  { name: "Malefica", img: "https://i.pinimg.com/736x/2f/83/9a/2f839a9b9b03a70f4b9feb812e8cf03a.jpg" },
+		  { name: "Yzma", img: "https://i.pinimg.com/1200x/20/47/ae/2047ae86c81bd2b6e1ab00797a8584a8.jpg" },
+		  { name: "Simba", img: "https://i.pinimg.com/736x/b1/90/89/b19089d874786ae283c4ba7f9ebed795.jpg" },
+		  { name: "Aurora", img: "https://i.pinimg.com/736x/b1/75/fb/b175fbb3b147ea7a9f74ef16b7e4abd3.jpg" },
+		  { name: "Kuzco", img: "https://i.pinimg.com/736x/75/cf/32/75cf32d90c87209bcf2c3e77be26117b.jpg" },
+		  { name: "Ben 10", img: "https://i.pinimg.com/736x/b3/c8/eb/b3c8ebedc4123fa33f6e72ff2deff109.jpg" },
           { name: "Gwen Tennyson", img: "https://i.pinimg.com/736x/f7/59/57/f75957bd5bad8195e2322e58de3f8119.jpg" }
         ];
 
@@ -235,15 +257,52 @@
             }
           }, []);
 
-          // FETCH LOBBIES
+          // FETCH LOBBIES E CLEANUP
           useEffect(() => {
             if (!user || !db) return;
+            
+            // Funzione di pulizia (best effort, eseguita dal client)
+            const cleanupOldLobbies = async () => {
+                const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'lobbies'));
+                const now = Date.now();
+                
+                querySnapshot.docs.forEach(async (docSnap) => {
+                    const data = docSnap.data();
+                    // Controlla se la lobby è in attesa e il timestamp è più vecchio di 10 minuti
+                    if (data.status === 'waiting' && data.timestamp) {
+                        const docTime = data.timestamp.toMillis();
+                        if (docTime < (now - TEN_MINUTES_MS)) {
+                            try {
+                                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', docSnap.id));
+                                console.log(`Lobby ${docSnap.id} eliminata per inattività.`);
+                            } catch(e) {
+                                console.error("Errore eliminazione lobby inattiva:", e);
+                            }
+                        }
+                    }
+                });
+            };
+
+            // Esegue la pulizia al caricamento del BrowserScreen
+            cleanupOldLobbies();
+
             const q = collection(db, 'artifacts', appId, 'public', 'data', 'lobbies');
             const unsubscribe = onSnapshot(q, (snapshot) => {
+              const now = Date.now();
+              
               const activeLobbies = snapshot.docs
                 .map(d => ({ id: d.id, ...d.data() }))
-                .filter(l => l.status === 'waiting' && l.timestamp);
-              activeLobbies.sort((a, b) => b.timestamp - a.timestamp);
+                .filter(l => {
+                     // 1. Deve essere in stato di attesa
+                     if (l.status !== 'waiting') return false;
+                     // 2. Deve avere un timestamp
+                     if (!l.timestamp) return false;
+                     
+                     // 3. Deve essere stata creata meno di 10 minuti fa (lobby attiva)
+                     return l.timestamp.toMillis() > (now - TEN_MINUTES_MS);
+                });
+
+              activeLobbies.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
               setLobbies(activeLobbies);
             }, (error) => {
                 console.error("Errore fetch lobbies:", error);
@@ -1196,7 +1255,9 @@
             }
 
             else if (lobby.phase === 'voting') {
-                const { safe, bottomTwo, eliminated, voteCounts, tie } = calculateCeremonyResults(lobby, lobby.votes, isMerge);
+                const isDoubleElimination = isMerge && Math.random() < 0.05; // 5% chance ONLY IF MERGE
+                
+                const { safe, bottomTwo, eliminated, voteCounts, tie } = calculateCeremonyResults(lobby, lobby.votes, isMerge, isDoubleElimination);
                 
                 // --- UPDATE TOTAL VOTES RECEIVED ---
                 const updatedPlayersWithVotes = lobby.players.map(p => {
@@ -1206,15 +1267,21 @@
                     }
                     return p;
                 });
+                
+                if (isDoubleElimination) {
+                   newLogs.push("!!! COLPO DI SCENA !!! Chris: 'Questa sera, per la prima volta, abbiamo una DOPPIA ELIMINAZIONE!'");
+                }
 
                 updates = { 
                     phase: 'ceremony', 
                     players: updatedPlayersWithVotes,
                     ceremonyData: { 
                         safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
+                        isDoubleElimination: isDoubleElimination, // Nuovo campo
+                        eliminatedSecond: eliminated.length > 1 ? eliminated[1] : null, // Secondo eliminato
                         tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
                     },
-                    logs: arrayUnion("--- CERIMONIA DI ELIMINAZIONE ---")
+                    logs: arrayUnion("--- CERIMONIA DI ELIMINAZIONE ---", ...newLogs)
                 };
             }
 
@@ -1269,115 +1336,130 @@
               } 
               else {
                   // FINE CERIMONIA
-                  let victimId = data.eliminated;
+
+                  let victimsIds = Array.isArray(data.eliminated) ? [...data.eliminated] : [data.eliminated].filter(Boolean);
+                  const isDouble = data.isDoubleElimination;
                   
-                  // --- IDOL CHECK ---
-                  if (lobby.idolData && lobby.idolData.holder === victimId && lobby.idolData.active) {
-                      newLogs.push(`COLPO DI SCENA! ${lobby.players.find(p => p.uid === victimId).name} usa l'Idolo dell'Immunità!`);
-                      updates[`idolData.active`] = false; // Idol consumed
+                  // --- IDOL CHECK (First Victim) ---
+                  let firstVictim = victimsIds[0];
+                  if (firstVictim && lobby.idolData && lobby.idolData.holder === firstVictim && lobby.idolData.active) {
+                      newLogs.push(`COLPO DI SCENA! ${lobby.players.find(p => p.uid === firstVictim).name} usa l'Idolo dell'Immunità!`);
+                      updates[`idolData.active`] = false; 
                       updates[`idolData.holder`] = null;
 
-                      // Find runner up
-                      const runnerUpId = data.bottomTwo.find(id => id !== victimId);
+                      // Sostituisce il primo eliminato con il prossimo più votato (il terzo se non c'è doppio, o il secondo del bottomTwo se non è doppio, oppure il terzo in generale se doppio)
+                      // Poiché calculateCeremonyResults ritorna 'eliminated' come array ordinato per voti (dal più alto), il secondo elemento è il 'runner up'
+                      const runnerUpId = data.bottomTwo.find(id => id !== firstVictim);
                       
-                      // Fallback if unique unanimous vote (rare, array has 1 element)
-                      if (!runnerUpId) {
-                          // Very rare: pick random safe person or just cancel elim. 
-                          // Simple fallback: pick first safe person (lowest votes)
-                          // Or pick the one with next highest votes if available in data.safe?
-                          // Let's grab the last person in safe array (sorted by votes asc usually, or we resort)
-                          // Note: calculateCeremonyResults returns safe sorted by votes asc. So last one has most votes among safe.
-                          if (data.safe.length > 0) {
-                              victimId = data.safe[data.safe.length - 1];
-                          } else {
-                              newLogs.push("Nessun altro da eliminare! Eliminazione annullata.");
-                              victimId = null;
-                          }
+                      if (runnerUpId) {
+                         firstVictim = runnerUpId;
+                         newLogs.push(`Il secondo più votato, ${lobby.players.find(p => p.uid === firstVictim).name}, viene eliminato al suo posto!`);
                       } else {
-                          victimId = runnerUpId;
-                      }
-
-                      if (victimId) {
-                         newLogs.push(`Il secondo più votato, ${lobby.players.find(p => p.uid === victimId).name}, viene eliminato!`);
+                          // Solo se c'è un voto unanime non gestito dal tie, annulliamo l'eliminazione
+                          newLogs.push("Nessun altro da eliminare! Eliminazione annullata.");
+                          firstVictim = null;
                       }
                   }
 
-                  if (victimId) {
-                      const victim = lobby.players.find(p => p.uid === victimId);
-                      const updatedPlayers = lobby.players.map(p => p.uid === victimId ? { ...p, status: 'eliminated' } : p);
+                  let finalVictims = [];
+                  if (firstVictim) {
+                      finalVictims.push(firstVictim);
                       
-                      // LOGICA REDEMPTION CHECK
-                      const nextRound = lobby.round + 1;
-                      const redemptionConfig = lobby.config.redemption;
-                      let isRedemptionEpisode = false;
-                      
-                      if (redemptionConfig && redemptionConfig.enabled && redemptionConfig.episodes) {
-                          if (Array.isArray(redemptionConfig.episodes)) {
-                               isRedemptionEpisode = redemptionConfig.episodes.includes(nextRound);
+                      // --- IDOL CHECK (Second Victim - solo in doppia eliminazione) ---
+                      if (isDouble && data.eliminatedSecond) {
+                          let secondVictim = data.eliminatedSecond;
+                          if (secondVictim === firstVictim) { // Se il secondo eliminato è stato promosso a primo
+                             // In una doppia eliminazione, l'obiettivo è eliminare i due con più voti. 
+                             // Se il primo si salva, il "runner-up" diventa il primo eliminato, e il prossimo più votato (quarto in linea) dovrebbe uscire come secondo.
+                             // Per semplicità, consideriamo il secondo elemento di 'eliminated' come il secondo più votato.
+                             const topTwoIds = Object.keys(data.voteCounts).sort((a, b) => data.voteCounts[b] - data.voteCounts[a]);
+                             
+                             // Trova l'ID del concorrente che è al secondo posto in termini di voti, e non è già nella lista dei finalVictims
+                             let nextVictim = topTwoIds.find(id => !finalVictims.includes(id) && lobby.players.find(p => p.uid === id).status === 'active');
+                             
+                             secondVictim = nextVictim;
+
+                          } else if (secondVictim === lobby.idolData?.holder && lobby.idolData?.active) {
+                              newLogs.push(`COSA?! ${lobby.players.find(p => p.uid === secondVictim).name} usa il SECONDO Idolo dell'Immunità (non supportato per semplicità, ma il dramma è vero!)`);
+                              updates[`idolData.active`] = false; 
+                              updates[`idolData.holder`] = null;
+                              // Annullo la seconda eliminazione se c'è un idolo in gioco (solo un idolo per ora)
+                              secondVictim = null; 
+                          }
+
+                          if (secondVictim && secondVictim !== firstVictim) {
+                              finalVictims.push(secondVictim);
                           }
                       }
+                  }
 
-                      if (isRedemptionEpisode) {
-                          updates = {
-                            ...updates,
-                            players: updatedPlayers,
-                            rankings: arrayUnion({ 
-                                name: victim.name, 
-                                team: victim.team || "Merge", 
-                                round: lobby.round, 
-                                season: currentSeason.name,
-                                immunities: victim.immunityWins || 0,
-                                votes: victim.totalVotesReceived || 0 
-                            }),
-                            phase: 'redemption',
-                            redemptionData: { active: true, stage: 'selection', candidates: [], rolls: {} },
-                            round: nextRound,
-                            votes: {},
-                            immunity: [],
-                            diceRoll: null,
-                            losingTeam: null,
-                            ceremonyData: null,
-                            challengeData: null,
-                            logs: arrayUnion(...newLogs, `${victim.name} è stato eliminato!`, `--- EPISODIO SPECIALE: REDEMPTION! ---`)
-                          };
-                      } else {
-                          updates = {
-                            ...updates,
-                            players: updatedPlayers,
-                            rankings: arrayUnion({ 
-                                name: victim.name, 
-                                team: victim.team || "Merge", 
-                                round: lobby.round, 
-                                season: currentSeason.name,
-                                immunities: victim.immunityWins || 0,
-                                votes: victim.totalVotesReceived || 0
-                            }),
-                            phase: 'episode_start',
-                            round: nextRound,
-                            votes: {},
-                            immunity: [],
-                            diceRoll: null,
-                            losingTeam: null,
-                            ceremonyData: null,
-                            challengeData: null,
-                            logs: arrayUnion(...newLogs, `${victim.name} è stato eliminato!`)
-                          };
+                  // Esecuzione eliminazioni
+                  let updatedPlayers = lobby.players;
+                  let rankingEntries = [];
+                  
+                  finalVictims.forEach(vId => {
+                      const victim = updatedPlayers.find(p => p.uid === vId);
+                      if (!victim || victim.status !== 'active') return; 
+
+                      updatedPlayers = updatedPlayers.map(p => p.uid === vId ? { ...p, status: 'eliminated' } : p);
+                      rankingEntries.push({ 
+                          name: victim.name, 
+                          team: victim.team || "Merge", 
+                          round: lobby.round, 
+                          season: currentSeason.name,
+                          immunities: victim.immunityWins || 0,
+                          votes: victim.totalVotesReceived || 0
+                      });
+                      newLogs.push(`${victim.name} è stato eliminato!`);
+                  });
+
+
+                  // Fine Logica
+                  
+                  const nextRound = lobby.round + 1;
+                  const redemptionConfig = lobby.config.redemption;
+                  let isRedemptionEpisode = false;
+                  
+                  if (redemptionConfig && redemptionConfig.enabled && redemptionConfig.episodes) {
+                      if (Array.isArray(redemptionConfig.episodes)) {
+                           isRedemptionEpisode = redemptionConfig.episodes.includes(nextRound);
                       }
+                  }
+
+                  if (finalVictims.length > 0) {
+                      updates.players = updatedPlayers;
+                      updates.rankings = arrayUnion(...rankingEntries);
+                  }
+
+                  if (isRedemptionEpisode) {
+                      updates = {
+                        ...updates,
+                        phase: 'redemption',
+                        redemptionData: { active: true, stage: 'selection', candidates: [], rolls: {} },
+                        round: nextRound,
+                        votes: {},
+                        immunity: [],
+                        diceRoll: null,
+                        losingTeam: null,
+                        ceremonyData: null,
+                        challengeData: null,
+                        logs: arrayUnion(...newLogs, `--- EPISODIO SPECIALE: REDEMPTION! ---`)
+                      };
                   } else {
-                      // IDOL SAVED EVERYONE (Rare)
-                       updates = {
-                            ...updates,
-                            phase: 'episode_start',
-                            round: lobby.round + 1,
-                            votes: {},
-                            immunity: [],
-                            diceRoll: null,
-                            losingTeam: null,
-                            ceremonyData: null,
-                            challengeData: null,
-                            logs: arrayUnion(...newLogs)
+                      updates = {
+                        ...updates,
+                        phase: 'episode_start',
+                        round: nextRound,
+                        votes: {},
+                        immunity: [],
+                        diceRoll: null,
+                        losingTeam: null,
+                        ceremonyData: null,
+                        challengeData: null,
+                        logs: arrayUnion(...newLogs)
                       };
                   }
+                  
               }
             }
             else if (lobby.phase === 'game_over') {
@@ -1440,7 +1522,7 @@
                      const maxReturning = lobby.players.length;
                      const humanCount = lobby.players.filter(p => !p.isBot).length;
                      setNextSeasonConfig({
-                        returningCount: Math.min(maxReturning, Math.max(16, humanCount)), 
+                        returningCount: Math.min(maxReturning, Math.max(2, humanCount)), 
                         numTeams: lobby.config.numTeams,
                         mergeSize: lobby.config.mergeSize || Math.floor(lobby.config.maxPlayers / 2)
                      });
@@ -1503,7 +1585,7 @@
             return votes;
           };
 
-          const calculateCeremonyResults = (lobbyState, currentVotes, isMerge) => {
+          const calculateCeremonyResults = (lobbyState, currentVotes, isMerge, isDoubleElimination = false) => {
               const counts = {};
               const activePlayers = lobbyState.players.filter(p => p.status === 'active');
               const validTargetIds = isMerge 
@@ -1516,28 +1598,53 @@
                   }
               });
 
+              // Ordina per voti discendenti
               const sortedVictims = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
               
               if (sortedVictims.length === 0 && validTargetIds.length > 0) {
+                  // Voto nullo, eliminazione casuale (fall back)
                   const rnd = validTargetIds[Math.floor(Math.random() * validTargetIds.length)];
-                  return { safe: validTargetIds.filter(id => id !== rnd), bottomTwo: [rnd], eliminated: rnd, voteCounts: counts, tie: null };
+                  return { safe: validTargetIds.filter(id => id !== rnd), bottomTwo: [rnd], eliminated: [rnd], voteCounts: counts, tie: null };
               }
 
+              // Verifica i pareggi per il primo posto (o i primi due in caso di doppia)
               const maxVotes = counts[sortedVictims[0]];
               const ties = sortedVictims.filter(id => counts[id] === maxVotes);
               
               if (ties.length > 1) {
-                  return { safe: validTargetIds.filter(id => !ties.includes(id)), bottomTwo: ties, eliminated: null, voteCounts: counts, tie: ties };
+                  // Pareggio per il primo posto. Serve spareggio (solo per singola eliminazione)
+                  if (!isDoubleElimination || (isDoubleElimination && ties.length > 2)) { 
+                     // Se non è doppia O se c'è un pareggio a 3 o più per i posti in eliminazione
+                     return { safe: validTargetIds.filter(id => !ties.includes(id)), bottomTwo: ties, eliminated: null, voteCounts: counts, tie: ties };
+                  }
               }
 
+              if (isDoubleElimination && sortedVictims.length >= 2) {
+                   const elim1 = sortedVictims[0];
+                   const elim2 = sortedVictims[1];
+                   
+                   const bottomTwo = sortedVictims.slice(0, 2);
+                   const safe = validTargetIds.filter(id => id !== elim1 && id !== elim2);
+
+                   // Se c'è un pareggio perfetto per il primo e il secondo posto tra 4 persone (es. 10, 10, 5, 5)
+                   if(ties.length === 2 && counts[sortedVictims[2]] < ties[0]) {
+                      // Pareggio a 2 per il primo posto, prendiamo entrambi
+                      return { safe, bottomTwo: ties, eliminated: ties, voteCounts: counts, tie: null };
+                   } else {
+                       // Elimina i primi due
+                       return { safe, bottomTwo, eliminated: [elim1, elim2], voteCounts: counts, tie: null };
+                   }
+              }
+
+              // Eliminazione singola
               const elimId = sortedVictims[0];
               const bottomTwo = sortedVictims.slice(0, 2);
-              if (!bottomTwo.includes(elimId)) bottomTwo[1] = elimId;
+              if (!bottomTwo.includes(elimId)) bottomTwo.push(elimId); // Assicurati che l'eliminato sia in bottomTwo
               
               let safe = validTargetIds.filter(id => !bottomTwo.includes(id));
-              safe.sort((a, b) => (counts[a] || 0) - (counts[b] || 0));
+              safe.sort((a, b) => (counts[a] || 0) - (counts[b] || 0)); // Ordina i salvi per voti crescenti
               
-              return { safe, bottomTwo, eliminated: elimId, voteCounts: counts, tie: null };
+              return { safe, bottomTwo, eliminated: [elimId], voteCounts: counts, tie: null };
           };
 
           const handleInteraction = async (type) => {
@@ -1574,14 +1681,16 @@
               }
               else if (type === 'alliance') {
                  if ((updatedPlayers[targetIdx].relationships[user.uid] || 0) <= 0) {
-                     alert("Devi essere amico per proporre un'alleanza!");
-                     return; 
+                     // Non uso alert() come da istruzioni, ma un console log con fallback UI 
+                     // per far capire che l'azione non è andata a buon fine.
+                     console.error("Devi essere amico per proporre un'alleanza!");
+                     msg = `${updatedPlayers[targetIdx].name} ha rifiutato l'alleanza. (Devi essere amico!)`;
                  }
                  
                  const currentAlliances = Array.isArray(updatedPlayers[targetIdx].alliances) ? updatedPlayers[targetIdx].alliances : [];
                  const myAlliances = Array.isArray(myPlayer.alliances) ? myPlayer.alliances : [];
 
-                 if (Math.random() > 0.5) {
+                 if ((updatedPlayers[targetIdx].relationships[user.uid] || 0) > 0 && Math.random() > 0.5) {
                      const p1Allies = [...currentAlliances, user.uid];
                      const p2Allies = [...myAlliances, targetId];
                      
@@ -1589,7 +1698,9 @@
                      updatedPlayers.find(p => p.uid === user.uid).alliances = [...new Set(p2Allies)];
                      
                      msg = `Alleanza formata con ${updatedPlayers[targetIdx].name}!`;
-                 } else msg = `${updatedPlayers[targetIdx].name} ha rifiutato l'alleanza.`;
+                 } else if ((updatedPlayers[targetIdx].relationships[user.uid] || 0) > 0) {
+                    msg = `${updatedPlayers[targetIdx].name} ha rifiutato l'alleanza.`;
+                 }
               }
 
               await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
@@ -1606,7 +1717,7 @@
               const myTeam = myPlayer.team;
               const losingTeam = lobby.losingTeam;
               if (!isMerge && myTeam !== losingTeam) {
-                  alert("NON PUOI VOTARE! Il tuo team ha vinto l'immunità.");
+                  console.error("NON PUOI VOTARE! Il tuo team ha vinto l'immunità.");
                   return;
               }
 
@@ -2245,6 +2356,7 @@
                                 ) : (
                                     <>
                                     <Flame size={64} className="text-orange-500 animate-pulse mb-4" />
+                                    {lobby.ceremonyData.isDoubleElimination && <div className="text-3xl font-black text-red-500 mb-2">DOPPIA ELIMINAZIONE!</div>}
                                     <h2 className="text-3xl font-black text-white mb-6">IL FUOCO DECIDE</h2>
                                     
                                     <div className="flex flex-wrap justify-center gap-2 mb-8 max-w-3xl">
@@ -2269,8 +2381,8 @@
                                         <div className="flex gap-8 items-center mt-4">
                                             {lobby.ceremonyData.bottomTwo.map(uid => {
                                                 const p = lobby.players.find(pl => pl.uid === uid);
-                                                const isEliminated = lobby.ceremonyData.finalReveal && uid === lobby.ceremonyData.eliminated;
-                                                const isSafe = lobby.ceremonyData.finalReveal && uid !== lobby.ceremonyData.eliminated;
+                                                const isEliminated = lobby.ceremonyData.finalReveal && ((Array.isArray(lobby.ceremonyData.eliminated) && lobby.ceremonyData.eliminated.includes(uid)) || (uid === lobby.ceremonyData.eliminated));
+                                                const isSafe = lobby.ceremonyData.finalReveal && !isEliminated;
                                                 const votes = lobby.ceremonyData.voteCounts?.[uid] || 0;
                                                 const showVotes = isEliminated || (isSafe && lobby.ceremonyData.finalReveal);
 

@@ -26,6 +26,15 @@
     
     <style>
         body { -webkit-overflow-scrolling: touch; } 
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-white">
@@ -57,7 +66,7 @@
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
           Trophy, Crown, UserPlus, Shield, Swords, Flame, 
           AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle, Undo2,
-          Package, Gem, Lock, Unlock
+          Package, Gem, Lock, Unlock, Target
         } from 'lucide-react';
 
         // --- TUE CHIAVI FIREBASE INSERITE ---
@@ -154,8 +163,8 @@
           { name: "Tess", img: "https://i.pinimg.com/736x/3f/bc/a9/3fbca9cb61b70f4d58c83598f0236764.jpg" },
 		  { name: "Hunter", img: "https://i.pinimg.com/736x/0d/f2/73/0df2731820fb9f74774f5e8607556625.jpg" },
 		  { name: "Jake DC", img: "https://i.pinimg.com/736x/bc/a0/76/bca0765eaa0f1e88b0070a5b92c22de7.jpg" },
-		  { name: "Tom", img: "https://i.pinimg.com/736x/3d/25/d7/3d25d7ea6cc56bf4bb868541014915fd.jpg" },
-		  { name: "Ashley", img: "https://i.pinimg.com/736x/53/b6/da/53b6dad67d0575a6e8ce73784657d111.jpg" },
+		  { name: "Tom", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
+		  { name: "Ashley", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
 		  { name: "Timmy", img: "https://i.pinimg.com/736x/91/de/1b/91de1b5b1897a71a36957191623af776.jpg" },
 		  { name: "Trixie", img: "https://i.pinimg.com/736x/05/08/a7/0508a771507d83f2b52a97467f57d581.jpg" },
 		  { name: "Vicky", img: "https://i.pinimg.com/1200x/f5/1f/2e/f51f2e0bff74df3173b110f24943a6fc.jpg" },
@@ -264,7 +273,8 @@
                 relationships: {},
                 alliances: [],
                 diceRoll: null,
-                immunityWins: 0 
+                immunityWins: 0,
+                totalVotesReceived: 0 // New field
               }],
               round: 0,
               phase: 'setup',
@@ -278,7 +288,7 @@
               challengeData: null, 
               finalData: null, 
               redemptionData: null,
-              idolData: null, // Nuovo campo per l'idolo
+              idolData: null,
               timestamp: serverTimestamp()
             };
 
@@ -307,7 +317,8 @@
                 relationships: {},
                 alliances: [],
                 diceRoll: null,
-                immunityWins: 0
+                immunityWins: 0,
+                totalVotesReceived: 0 // New field
               })
             });
             setCurrentLobbyId(lobbyId);
@@ -420,7 +431,7 @@
                        <div className="text-center py-12 text-slate-500 italic bg-slate-800/50 rounded-xl">Nessuna partita in corso.</div>
                      ) : (
                        lobbies.map(l => (
-                         <div key={l.id} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center hover:bg-slate-750 border border-slate-700 transition">
+                         <div key={l.id} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center hover:bg-slate-700/50 border border-slate-700 transition">
                            <div>
                              <span className="font-bold text-lg text-white">{l.hostName}'s Show</span>
                              <div className="flex gap-2 mt-1">
@@ -444,9 +455,10 @@
                   
                   <div className="space-y-6">
                     <div>
-                      <label className="block text-slate-400 font-bold mb-2">Concorrenti (8 - 53)</label>
+                      {/* MODIFICATO IL LIMITE MAX A 62 */}
+                      <label className="block text-slate-400 font-bold mb-2">Concorrenti (8 - 62)</label>
                       <div className="flex items-center gap-4">
-                        <input type="range" min="8" max="53" value={config.maxPlayers} onChange={e => {
+                        <input type="range" min="8" max="62" value={config.maxPlayers} onChange={e => {
                             const newVal = parseInt(e.target.value);
                             setConfig({
                                 ...config, 
@@ -602,7 +614,8 @@
                 relationships: {},
                 alliances: [],
                 diceRoll: null,
-                immunityWins: 0 
+                immunityWins: 0,
+                totalVotesReceived: 0 // New field
               });
             }
 
@@ -984,7 +997,8 @@
                 relationships: {}, 
                 alliances: [], 
                 diceRoll: null,
-                immunityWins: 0 
+                immunityWins: 0,
+                totalVotesReceived: p.totalVotesReceived || 0 // Preserve votes
             }));
 
             const numTeams = newConfig.numTeams;
@@ -1161,8 +1175,18 @@
             else if (lobby.phase === 'voting') {
                 const { safe, bottomTwo, eliminated, voteCounts, tie } = calculateCeremonyResults(lobby, lobby.votes, isMerge);
                 
+                // --- UPDATE TOTAL VOTES RECEIVED ---
+                const updatedPlayersWithVotes = lobby.players.map(p => {
+                    const received = voteCounts[p.uid] || 0;
+                    if (received > 0) {
+                        return { ...p, totalVotesReceived: (p.totalVotesReceived || 0) + received };
+                    }
+                    return p;
+                });
+
                 updates = { 
                     phase: 'ceremony', 
+                    players: updatedPlayersWithVotes,
                     ceremonyData: { 
                         safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
                         tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
@@ -1279,7 +1303,8 @@
                                 team: victim.team || "Merge", 
                                 round: lobby.round, 
                                 season: currentSeason.name,
-                                immunities: victim.immunityWins || 0 
+                                immunities: victim.immunityWins || 0,
+                                votes: victim.totalVotesReceived || 0 
                             }),
                             phase: 'redemption',
                             redemptionData: { active: true, stage: 'selection', candidates: [], rolls: {} },
@@ -1301,7 +1326,8 @@
                                 team: victim.team || "Merge", 
                                 round: lobby.round, 
                                 season: currentSeason.name,
-                                immunities: victim.immunityWins || 0 
+                                immunities: victim.immunityWins || 0,
+                                votes: victim.totalVotesReceived || 0
                             }),
                             phase: 'episode_start',
                             round: nextRound,
@@ -1378,7 +1404,8 @@
                       team: "FINALIST", 
                       round: "FINALE", 
                       season: currentSeason.name,
-                      immunities: loser.immunityWins || 0
+                      immunities: loser.immunityWins || 0,
+                      votes: loser.totalVotesReceived || 0
                   };
                   
                   if (lobby.currentSeasonIndex < lobby.config.numSeasons - 1) {
@@ -1403,7 +1430,8 @@
                          team: "WINNER", 
                          round: "WINNER", 
                          season: currentSeason.name,
-                         immunities: winner.immunityWins || 0 
+                         immunities: winner.immunityWins || 0,
+                         votes: winner.totalVotesReceived || 0 
                      };
                      // FIX: Add both entries to rankings
                      updates.rankings = arrayUnion(loserEntry, winnerEntry); 
@@ -2074,44 +2102,80 @@
 
                      {lobby.phase === 'game_over' && (
                          <div className="flex flex-col items-center h-full justify-center">
-                             <h1 className="text-5xl font-black text-yellow-400 mb-4">CLASSIFICA FINALE</h1>
-                             <div className="w-full max-w-xl relative">
-                                <div className="bg-slate-800 rounded-xl overflow-hidden shadow-2xl max-h-[60vh] overflow-y-auto border border-slate-700">
-                                     {lobby.rankings.slice().reverse().map((r, i) => {
-                                         const charImg = ROSTER.find(c => c.name === r.name)?.img || "";
-                                         return (
-                                             <div key={i} className={`flex items-center justify-between p-4 border-b border-slate-700 ${i === 0 ? 'bg-gradient-to-r from-yellow-500/20 to-transparent' : 'hover:bg-slate-700/50'}`}>
-                                                 <div className="flex items-center gap-4">
-                                                     <div className={`font-black text-xl w-8 text-center flex-shrink-0 ${i === 0 ? 'text-yellow-400 scale-125' : 'text-slate-500'}`}>
-                                                        {i === 0 ? <Crown size={24} className="mx-auto"/> : i+1}
-                                                     </div>
-                                                     
-                                                     <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-slate-600 flex-shrink-0">
-                                                        {charImg && <img src={charImg} className="w-full h-full object-cover"/>}
-                                                     </div>
+                             <h1 className="text-5xl font-black text-yellow-400 mb-8">CLASSIFICA FINALE</h1>
+                             
+                             <div className="flex flex-col md:flex-row gap-8 w-full max-w-5xl h-[70vh]">
+                                 {/* CLASSIFICA PIAZZAMENTI */}
+                                 <div className="flex-1 bg-slate-800 rounded-xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col">
+                                     <div className="bg-slate-700/50 p-4 border-b border-slate-600 text-center font-bold text-yellow-400 uppercase tracking-widest sticky top-0">
+                                         Piazzamenti
+                                     </div>
+                                     <div className="flex-1 overflow-y-auto no-scrollbar">
+                                         {lobby.rankings.slice().reverse().map((r, i) => {
+                                             const charImg = ROSTER.find(c => c.name === r.name)?.img || "";
+                                             return (
+                                                 <div key={i} className={`flex items-center justify-between p-4 border-b border-slate-700 ${i === 0 ? 'bg-gradient-to-r from-yellow-500/20 to-transparent' : 'hover:bg-slate-700/50'}`}>
+                                                     <div className="flex items-center gap-4">
+                                                         <div className={`font-black text-xl w-8 text-center flex-shrink-0 ${i === 0 ? 'text-yellow-400 scale-125' : 'text-slate-500'}`}>
+                                                            {i === 0 ? <Crown size={24} className="mx-auto"/> : i+1}
+                                                         </div>
+                                                         
+                                                         <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-slate-600 flex-shrink-0">
+                                                            {charImg && <img src={charImg} className="w-full h-full object-cover"/>}
+                                                         </div>
 
-                                                     <div>
-                                                         <div className={`font-bold text-lg ${i === 0 ? 'text-yellow-100' : 'text-white'}`}>{r.name}</div>
-                                                         <div className="text-xs text-slate-400 uppercase flex items-center gap-2">
-                                                            <span>{r.season} • {r.team}</span>
-                                                            {r.immunities > 0 && (
-                                                                <span className="flex items-center gap-1 text-yellow-400 ml-1" title="Immunità vinte nel Merge">
-                                                                    <Shield size={12} fill="currentColor" /> {r.immunities}
-                                                                </span>
-                                                            )}
+                                                         <div>
+                                                             <div className={`font-bold text-lg ${i === 0 ? 'text-yellow-100' : 'text-white'}`}>{r.name}</div>
+                                                             <div className="text-xs text-slate-400 uppercase flex items-center gap-2">
+                                                                <span>{r.season} • {r.team}</span>
+                                                             </div>
                                                          </div>
                                                      </div>
                                                  </div>
-                                                 <div className="font-mono text-sm text-slate-500 bg-slate-900 px-2 py-1 rounded">
-                                                     {i === 0 ? "VINCITORE" : `Eliminato: ${r.round}`}
+                                             )
+                                         })}
+                                     </div>
+                                 </div>
+
+                                 {/* CLASSIFICA VOTI RICEVUTI (EXTRA) */}
+                                 <div className="flex-1 bg-slate-800 rounded-xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col">
+                                     <div className="bg-slate-700/50 p-4 border-b border-slate-600 text-center font-bold text-red-400 uppercase tracking-widest sticky top-0 flex items-center justify-center gap-2">
+                                         <Target size={20}/> Classifica Bersagli (Voti)
+                                     </div>
+                                     <div className="flex-1 overflow-y-auto no-scrollbar">
+                                         {(() => {
+                                            // Sort unique players by votes descending
+                                            // Note: lobby.rankings contains everyone eliminated + winner. 
+                                            // We use it as source to ensure we have static data, but we sort by 'votes' field.
+                                            // Handle potential duplicate names if multi-season but rankings accumulates them.
+                                            // For simplicity, we just list them.
+                                            const sortedByVotes = [...lobby.rankings].sort((a, b) => (b.votes || 0) - (a.votes || 0));
+                                            
+                                            return sortedByVotes.map((r, i) => {
+                                                const charImg = ROSTER.find(c => c.name === r.name)?.img || "";
+                                                return (
+                                                 <div key={i} className="flex items-center justify-between p-4 border-b border-slate-700 hover:bg-slate-700/50">
+                                                     <div className="flex items-center gap-4">
+                                                         <div className="font-bold text-slate-500 w-6 text-center">{i+1}</div>
+                                                         <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-600 flex-shrink-0 grayscale opacity-80">
+                                                            {charImg && <img src={charImg} className="w-full h-full object-cover"/>}
+                                                         </div>
+                                                         <div className="font-bold text-white text-sm">{r.name}</div>
+                                                     </div>
+                                                     <div className="flex items-center gap-2">
+                                                         <div className="font-black text-xl text-red-500">{r.votes || 0}</div>
+                                                         <span className="text-xs text-slate-500 uppercase">Voti</span>
+                                                     </div>
                                                  </div>
-                                             </div>
-                                         )
-                                     })}
-                                </div>
-                                <div className="absolute -bottom-8 left-0 right-0 flex justify-center text-slate-500 animate-bounce">
-                                   <ChevronDown size={32} />
-                                </div>
+                                                );
+                                            });
+                                         })()}
+                                     </div>
+                                 </div>
+                             </div>
+                             
+                             <div className="mt-4 text-slate-500 text-sm animate-bounce">
+                                <ChevronDown size={24} className="mx-auto"/>
                              </div>
                          </div>
                      )}

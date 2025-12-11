@@ -67,7 +67,7 @@
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
           Trophy, Crown, UserPlus, Shield, Swords, Flame, 
           AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle, Undo2,
-          Package, Gem, Lock, Unlock, Target
+          Package, Gem, Lock, Unlock, Target, Users2
         } from 'lucide-react';
 
         // --- TUE CHIAVI FIREBASE INSERITE ---
@@ -859,7 +859,41 @@
             if (!isHost || lobby.phase !== 'challenge' || !lobby.challengeData || lobby.challengeData.stage !== 'rolling') return;
 
             const { rollingIndex, players: rollPlayers, rolls } = lobby.challengeData;
+            
+            // --- CALCOLO VINCITORI A FINE GIRI ---
             if (rollingIndex >= rollPlayers.length) {
+                 
+                 // --- LOGICA SFIDA A SQUADRE (NEW) ---
+                 if (lobby.challengeData.type === 'team') {
+                     const teamScores = { A: 0, B: 0 };
+                     const teams = lobby.challengeData.teams;
+
+                     Object.entries(rolls).forEach(([uid, r]) => {
+                         const team = teams[uid];
+                         if (team) teamScores[team] += r;
+                     });
+
+                     let winnerTeam = null;
+                     if (teamScores.A > teamScores.B) winnerTeam = 'A';
+                     else if (teamScores.B > teamScores.A) winnerTeam = 'B';
+                     else winnerTeam = Math.random() > 0.5 ? 'A' : 'B'; // Coin flip on total tie (rare but possible)
+
+                     const immunePlayers = Object.keys(teams).filter(uid => teams[uid] === winnerTeam);
+                     
+                     updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                         [`challengeData.stage`]: 'finished',
+                         [`challengeData.winner`]: immunePlayers, // Array di vincitori
+                         immunity: immunePlayers,
+                         losingTeam: "MERGE",
+                         readyPlayers: [], 
+                         phase: 'social',
+                         logs: arrayUnion(`La Squadra ${winnerTeam === 'A' ? 'ROSSA' : 'BLU'} vince la sfida a squadre! (${teamScores[winnerTeam]} vs ${teamScores[winnerTeam === 'A' ? 'B' : 'A']})`)
+                     });
+                     return;
+                 }
+
+
+                 // --- LOGICA INDIVIDUALE STANDARD ---
                  let maxRoll = -1;
                  let winners = [];
                  Object.entries(rolls).forEach(([uid, r]) => {
@@ -1211,14 +1245,68 @@
                   updates = { phase: 'challenge', logs: arrayUnion(`--- SFIDA EPISODIO ${lobby.round} ---`) };
                   
                   if (isMerge) {
+                      // 8% CHANCE OF TEAM IMMUNITY IN MERGE
+                      const isTeamChallenge = Math.random() < 0.08; 
+
+                      if (isTeamChallenge) {
+                          // RANDOM TEAM SPLIT
+                          const shuffled = [...activePlayers].sort(() => Math.random() - 0.5);
+                          const mid = Math.ceil(shuffled.length / 2);
+                          const teamA = shuffled.slice(0, mid).map(p => p.uid);
+                          const teamB = shuffled.slice(mid).map(p => p.uid);
+                          
+                          const tempTeams = {};
+                          teamA.forEach(uid => tempTeams[uid] = 'A');
+                          teamB.forEach(uid => tempTeams[uid] = 'B');
+
+                          updates.challengeData = {
+                              type: 'team', // Special type
+                              teams: tempTeams,
+                              players: [...teamA, ...teamB], // All roll
+                              rollingIndex: 0,
+                              rolls: {},
+                              stage: 'rolling',
+                              winner: null
+                          };
+                          
+                          newLogs.push("Chris: Oggi sfida speciale! Vi dividerò in due squadre casuali.");
+                          newLogs.push("La squadra che totalizza il punteggio più alto vince l'immunità!");
+
+                      } else {
+                          // STANDARD INDIVIDUAL
+                          const rollers = activePlayers.map(p => p.uid);
+                          updates.challengeData = {
+                              type: 'individual',
+                              players: rollers,
+                              rollingIndex: 0,
+                              rolls: {},
+                              stage: 'rolling',
+                              winner: null
+                          };
+                      }
+                  } else {
+                      // PRE-MERGE (Standard Teams)
                       const rollers = activePlayers.map(p => p.uid);
                       updates.challengeData = {
-                          players: rollers,
-                          rollingIndex: 0,
-                          rolls: {},
-                          stage: 'rolling',
-                          winner: null
+                         type: 'standard', // Pre-merge standard
+                         players: rollers,
+                         // Logic handled in resolve phase (sum team scores or highest roll wins for team?) 
+                         // Note: In previous pre-merge code we just picked a random winner. 
+                         // Let's keep pre-merge simple/random as before to not break existing flow, 
+                         // or we can implement actual rolling for pre-merge too?
+                         // The existing code for pre-merge just skips to 'social' with random winner.
+                         // So we don't set challengeData if not Merge.
                       };
+                      // Actually, let's keep consistent with previous logic:
+                      // If NOT merge, we skip 'challenge' rolling phase and go straight to resolving in 'social' setup?
+                      // Wait, previous code:
+                      /* else if (lobby.phase === 'challenge') {
+                          if (!isMerge) {
+                             // Randomly picks winner immediately
+                          }
+                        }
+                      */
+                      // So we just transition to 'challenge' phase, and the next click handles it.
                   }
               }
             }
@@ -1243,6 +1331,7 @@
                     logs: arrayUnion(...newLogs)
                  };
               }
+              // MERGE LOGIC IS HANDLED INSIDE useEffect (Rolling) -> Auto transitions
             }
 
             else if (lobby.phase === 'social') {
@@ -1278,7 +1367,7 @@
                     ceremonyData: { 
                         safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
                         isDoubleElimination: isDoubleElimination, // Nuovo campo
-                        eliminatedSecond: eliminated.length > 1 ? eliminated[1] : null, // Secondo eliminato
+                        eliminatedSecond: (Array.isArray(eliminated) && eliminated.length > 1) ? eliminated[1] : null, // FIX: Safe check for eliminated
                         tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
                     },
                     logs: arrayUnion("--- CERIMONIA DI ELIMINAZIONE ---", ...newLogs)
@@ -2091,8 +2180,10 @@
                      {lobby.phase === 'challenge' && isMerge && lobby.challengeData && (
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
                             {lobby.challengeData.stage === 'rolling' ? (
-                                <div className="text-center animate-pulse">
-                                    <h2 className="text-3xl font-bold mb-4">LANCIO DEI DADI...</h2>
+                                <div className="text-center animate-pulse w-full max-w-4xl">
+                                    <h2 className="text-3xl font-bold mb-4 uppercase">
+                                        {lobby.challengeData.type === 'team' ? "SFIDA A SQUADRE (50% IMMUNITÀ)" : "SFIDA INDIVIDUALE"}
+                                    </h2>
                                     
                                     <div className="mb-8">
                                         <div className="text-2xl font-bold text-slate-300">Tocca a:</div>
@@ -2107,24 +2198,60 @@
                                         </button>
                                     )}
 
+                                    {/* VISUALIZZAZIONE DADI */}
                                     <div className="flex flex-wrap gap-4 justify-center">
-                                        {Object.entries(lobby.challengeData.rolls).map(([uid, val]) => {
-                                            const p = lobby.players.find(pl => pl.uid === uid);
-                                            return (
-                                                <div key={uid} className="bg-slate-800 p-4 rounded-xl flex flex-col items-center border border-slate-600 animate-in zoom-in">
-                                                    <img src={p.character.img} className="w-12 h-12 rounded-full mb-2"/>
-                                                    <div className="text-3xl font-black">{val}</div>
-                                                </div>
-                                            )
-                                        })}
+                                        {lobby.challengeData.type === 'team' ? (
+                                            /* TEAM VIEW */
+                                            <div className="flex w-full gap-8 justify-center">
+                                                {['A', 'B'].map(team => {
+                                                    const teamMembers = Object.entries(lobby.challengeData.teams).filter(([u, t]) => t === team).map(([u]) => u);
+                                                    const teamScore = teamMembers.reduce((acc, uid) => acc + (lobby.challengeData.rolls[uid] || 0), 0);
+                                                    
+                                                    return (
+                                                        <div key={team} className={`flex-1 bg-slate-800/50 p-4 rounded-xl border-4 ${team === 'A' ? 'border-red-500' : 'border-blue-500'}`}>
+                                                            <div className={`text-2xl font-black mb-4 ${team === 'A' ? 'text-red-400' : 'text-blue-400'}`}>
+                                                                {team === 'A' ? "SQUADRA ROSSA" : "SQUADRA BLU"} ({teamScore})
+                                                            </div>
+                                                            <div className="flex flex-wrap justify-center gap-2">
+                                                                {teamMembers.map(uid => {
+                                                                    const p = lobby.players.find(pl => pl.uid === uid);
+                                                                    const roll = lobby.challengeData.rolls[uid];
+                                                                    return (
+                                                                        <div key={uid} className="bg-slate-900 p-2 rounded flex items-center gap-2">
+                                                                            <img src={p.character.img} className="w-8 h-8 rounded-full"/>
+                                                                            <span className="font-bold">{roll || "-"}</span>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        ) : (
+                                            /* INDIVIDUAL VIEW */
+                                            Object.entries(lobby.challengeData.rolls).map(([uid, val]) => {
+                                                const p = lobby.players.find(pl => pl.uid === uid);
+                                                return (
+                                                    <div key={uid} className="bg-slate-800 p-4 rounded-xl flex flex-col items-center border border-slate-600 animate-in zoom-in">
+                                                        <img src={p.character.img} className="w-12 h-12 rounded-full mb-2"/>
+                                                        <div className="text-3xl font-black">{val}</div>
+                                                    </div>
+                                                )
+                                            })
+                                        )}
                                     </div>
                                 </div>
                             ) : (
                                 <div className="text-center animate-in zoom-in duration-500">
                                      <Trophy size={80} className="text-yellow-400 mx-auto mb-4"/>
                                      <h1 className="text-5xl font-black text-white mb-2">IMMUNITÀ</h1>
-                                     <div className="text-2xl text-yellow-400 font-bold mb-8">
-                                         {lobby.immunity.map(uid => lobby.players.find(p => p.uid === uid)?.name).join(", ")}
+                                     <div className="text-2xl text-yellow-400 font-bold mb-8 flex flex-wrap justify-center gap-2">
+                                         {lobby.immunity.map(uid => (
+                                             <div key={uid} className="bg-yellow-500/20 px-4 py-2 rounded-lg border border-yellow-500">
+                                                 {lobby.players.find(p => p.uid === uid)?.name}
+                                             </div>
+                                         ))}
                                      </div>
                                      {isHost && <div className="text-sm text-slate-400">Clicca Avanti per continuare</div>}
                                 </div>

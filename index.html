@@ -3,1692 +3,1636 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gioco di Carte a Turni - Cosmic Clash</title>
-    <!-- Caricamento di Tailwind CSS per uno stile moderno e reattivo -->
+    <title>Total Drama Online</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Import Map per React e Firebase -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js",
+        "lucide-react": "https://esm.sh/lucide-react@0.294.0"
+      }
+    }
+    </script>
+    
+    <!-- Babel Standalone -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <style>
-        /* Stile personalizzato per l'aspetto del gioco */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0d1117; /* Sfondo scuro */
-            color: #c9d1d9;
-        }
-        .card-container {
-            width: 140px; /* Leggermente più piccole per stare meglio sul tavolo */
-            height: 200px;
-            perspective: 1000px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .card-container:hover {
-            transform: translateY(-5px);
-        }
-        .card {
-            width: 100%;
-            height: 100%;
-            transition: transform 0.6s;
-            transform-style: preserve-3d;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-            border-radius: 12px;
-            border: 3px solid transparent;
-            background: #1f2730;
-        }
-        .card-front, .card-back {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            backface-visibility: hidden;
-            border-radius: 10px;
-            padding: 6px;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .card-front {
-            background: linear-gradient(145deg, #1f2730, #161c24);
-        }
-        .card-back {
-            background-color: #2c5282;
-            transform: rotateY(180deg);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            font-weight: bold;
-            border: 2px solid #4a5568;
-            background-image: repeating-linear-gradient(45deg, #2c5282 25%, #2a4365 25%, #2a4365 50%, #2c5282 50%, #2c5282 75%, #2a4365 75%, #2a4365 100%);
-            background-size: 20px 20px;
-        }
-        .card.flipped {
-            transform: rotateY(180deg);
-        }
-        /* Bordi colorati per rarità/tipo */
-        .ability-guerriero { border-color: #ef4444; }
-        .ability-lanciatore { border-color: #3b82f6; }
-        .ability-curatore { border-color: #10b981; }
-        .ability-protettivo { border-color: #f59e0b; }
-        .ability-mago { border-color: #8b5cf6; }
-        .ability-alieno { border-color: #ec4899; }
-
-        .game-screen-container {
-            min-height: 100vh;
-        }
-
-        /* --- STILI TAVOLO DA GIOCO --- */
-        #battle-table {
-            position: relative;
-            width: 100%;
-            height: 650px; /* Altezza fissa per il tavolo */
-            background-color: #1a472a; /* Verde panno da gioco */
-            border: 12px solid #5d4037; /* Bordo legno */
-            border-radius: 20px;
-            box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
-            overflow: hidden;
-            margin-bottom: 20px;
-        }
-
-        .player-zone {
-            position: absolute;
-            padding: 10px;
-            border-radius: 12px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: all 0.5s ease;
-        }
-
-        /* Zona Giocatore (Tu) - In Basso */
-        .zone-bottom {
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80%;
-            height: 230px;
-            background-color: rgba(0, 0, 0, 0.3); /* Base scura */
-            border-top: 2px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* Zona Opposto (1v1) - In Alto */
-        .zone-top {
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80%;
-            height: 230px;
-            background-color: rgba(255, 0, 0, 0.15); /* Rosso leggero */
-            border-bottom: 2px solid rgba(255, 0, 0, 0.3);
-        }
-
-        /* Zone Laterali (FFA) */
-        .zone-left {
-            top: 50%;
-            left: 10px;
-            transform: translateY(-50%) rotate(90deg);
-            width: 400px;
-            height: 180px;
-            background-color: rgba(255, 255, 0, 0.1);
-        }
-
-        .zone-right {
-            top: 50%;
-            right: 10px;
-            transform: translateY(-50%) rotate(-90deg);
-            width: 400px;
-            height: 180px;
-            background-color: rgba(0, 0, 255, 0.1);
-        }
-
-        .card-name-text {
-            /* Fix per testo tagliato */
-            white-space: normal;
-            line-height: 1.1;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            font-size: 0.8rem;
-        }
-
+        body { -webkit-overflow-scrolling: touch; } 
     </style>
 </head>
-<body>
-    <div id="app" class="p-2 sm:p-4 game-screen-container max-w-7xl mx-auto">
-        <div id="loading-screen" class="flex flex-col items-center justify-center min-h-screen text-xl">
-            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
-            <p class="mt-4">Caricamento in corso... (v1.2 Fixed)</p>
-        </div>
+<body class="bg-slate-900 text-white">
+    <div id="root"></div>
 
-        <!-- Schermo Principale/Menu -->
-        <div id="main-menu" class="hidden w-full">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-6 p-4 bg-gray-800 rounded-lg shadow-xl">
-                <h1 class="text-3xl font-bold text-blue-400 mb-2 md:mb-0">Cosmic Clash</h1>
-                <div class="flex items-center gap-4">
-                    <span id="user-info" class="text-sm bg-gray-700 p-2 rounded-full"></span>
-                    <span id="user-coins" class="text-lg font-bold bg-yellow-600 text-yellow-100 px-4 py-2 rounded-full shadow-lg"></span>
-                </div>
-            </div>
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { initializeApp } from 'firebase/app';
+        import { 
+          getAuth, 
+          signInAnonymously, 
+          onAuthStateChanged,
+          signInWithCustomToken
+        } from 'firebase/auth';
+        import { 
+          getFirestore, 
+          collection, 
+          doc, 
+          setDoc, 
+          getDoc, 
+          updateDoc, 
+          onSnapshot, 
+          arrayUnion,
+          serverTimestamp,
+          deleteDoc
+        } from 'firebase/firestore';
+        import { 
+          Heart, Users, Play, LogOut, MessageSquare, Skull, 
+          Trophy, Crown, UserPlus, Shield, Swords, Flame, 
+          AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award
+        } from 'lucide-react';
 
-            <div id="nickname-setup" class="bg-gray-800 p-6 rounded-xl shadow-2xl mb-6">
-                <h2 class="text-xl font-semibold mb-3">Imposta Nickname</h2>
-                <input type="text" id="nickname-input" placeholder="Il tuo Nickname" class="w-full p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500">
-                <button id="set-nickname-btn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200 shadow-md">Salva Nickname</button>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <button onclick="showScreen('deck-manager')" class="menu-btn bg-indigo-600 hover:bg-indigo-700 p-6 rounded-xl text-xl font-bold shadow-2xl transition duration-300 transform hover:scale-105">
-                    Gestione Deck
-                </button>
-                <button onclick="showScreen('shop')" class="menu-btn bg-yellow-600 hover:bg-yellow-700 p-6 rounded-xl text-xl font-bold shadow-2xl transition duration-300 transform hover:scale-105">
-                    Shop di Carte
-                </button>
-                <button onclick="showScreen('create-room')" class="menu-btn bg-green-600 hover:bg-green-700 p-6 rounded-xl text-xl font-bold shadow-2xl transition duration-300 transform hover:scale-105">
-                    Crea Stanza
-                </button>
-                <button onclick="showScreen('join-room')" class="menu-btn bg-red-600 hover:bg-red-700 p-6 rounded-xl text-xl font-bold shadow-2xl transition duration-300 transform hover:scale-105">
-                    Unisciti a Stanza
-                </button>
-            </div>
-
-            <div id="status-message" class="mt-6 p-4 text-center text-lg rounded-lg bg-gray-700 hidden"></div>
-        </div>
-
-        <!-- Gestione Deck -->
-        <div id="deck-manager" class="hidden w-full">
-            <h2 class="text-3xl font-bold mb-6 text-center text-blue-400">Gestione Deck (Max 10 Carte)</h2>
-            <div class="flex justify-between items-center mb-4">
-                <button onclick="showScreen('main-menu')" class="bg-gray-600 hover:bg-gray-700 p-2 rounded-lg transition duration-200">← Torna al Menu</button>
-                <div class="text-lg font-semibold">Carte nel Deck: <span id="deck-count" class="text-yellow-400">0</span>/10</div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Carte Attuali nel Deck -->
-                <div class="bg-gray-800 p-4 rounded-xl shadow-2xl">
-                    <h3 class="text-xl font-semibold mb-4 text-center">Il tuo Deck Attuale</h3>
-                    <div id="current-deck-cards" class="flex flex-wrap gap-4 justify-center min-h-[240px]">
-                        <!-- Carte del deck verranno iniettate qui -->
-                        <p class="text-gray-500 mt-8">Deck vuoto. Aggiungi carte dalla tua Collezione.</p>
-                    </div>
-                </div>
-
-                <!-- Collezione di Carte Sbloccate -->
-                <div class="bg-gray-800 p-4 rounded-xl shadow-2xl">
-                    <h3 class="text-xl font-semibold mb-4 text-center">La tua Collezione (<span id="collection-count">0</span> carte)</h3>
-                    <div id="collection-cards" class="flex flex-wrap gap-4 justify-center min-h-[240px]">
-                        <!-- Carte della collezione verranno iniettate qui -->
-                    </div>
-                </div>
-            </div>
-            <div id="deck-error-message" class="mt-4 p-3 bg-red-800 rounded-lg text-center hidden"></div>
-        </div>
-
-        <!-- Shop -->
-        <div id="shop" class="hidden w-full">
-            <h2 class="text-3xl font-bold mb-6 text-center text-yellow-400">Shop di Carte</h2>
-            <div class="flex justify-between items-center mb-6">
-                <button onclick="showScreen('main-menu')" class="bg-gray-600 hover:bg-gray-700 p-2 rounded-lg transition duration-200">← Torna al Menu</button>
-                <div class="text-lg font-bold">Monete: <span id="shop-coins" class="text-yellow-400">0</span></div>
-            </div>
-
-            <div id="shop-message" class="mb-6 p-4 text-center rounded-lg bg-gray-700 text-xl font-bold hidden"></div>
-
-            <div id="shop-cards-list" class="flex flex-wrap gap-6 justify-center">
-                <!-- Carte in vendita verranno iniettate qui -->
-            </div>
-        </div>
-
-        <!-- Creazione Stanza -->
-        <div id="create-room" class="hidden max-w-2xl mx-auto bg-gray-800 p-8 rounded-xl shadow-2xl">
-            <h2 class="text-3xl font-bold mb-6 text-center text-green-400">Crea Stanza</h2>
-            <button onclick="showScreen('main-menu')" class="bg-gray-600 hover:bg-gray-700 p-2 rounded-lg transition duration-200 mb-6">← Torna al Menu</button>
-
-            <label class="block mb-4">
-                <span class="text-white">Modalità di Gioco:</span>
-                <select id="game-mode" class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600">
-                    <option value="1v1">1 vs 1</option>
-                    <option value="ffa">FFA (Fino a 4 Giocatori)</option>
-                </select>
-            </label>
-
-            <label class="block mb-4">
-                <span class="text-white">Aggiungi CPU?</span>
-                <select id="cpu-enabled" class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600">
-                    <option value="no">No</option>
-                    <option value="yes">Sì</option>
-                </select>
-            </label>
-
-            <label class="block mb-4">
-                <span class="text-white">Carte Totali nel Deck (Min 1, Max 10):</span>
-                <input type="number" id="deck-size-limit" value="10" min="1" max="10" class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600">
-            </label>
-
-            <label class="block mb-6">
-                <span class="text-white">Carte in Campo per Persona (Min 1, Max 3):</span>
-                <input type="number" id="field-size-limit" value="3" min="1" max="3" class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600">
-            </label>
-
-            <button id="create-room-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition duration-200 shadow-md">Crea Stanza</button>
-            <div id="room-status" class="mt-4 p-3 text-center rounded-lg bg-gray-700 hidden"></div>
-        </div>
-
-        <!-- Unisciti a Stanza -->
-        <div id="join-room" class="hidden max-w-2xl mx-auto bg-gray-800 p-8 rounded-xl shadow-2xl">
-            <h2 class="text-3xl font-bold mb-6 text-center text-red-400">Unisciti a Stanza</h2>
-            <button onclick="showScreen('main-menu')" class="bg-gray-600 hover:bg-gray-700 p-2 rounded-lg transition duration-200 mb-6">← Torna al Menu</button>
-
-            <label class="block mb-6">
-                <span class="text-white">ID Stanza:</span>
-                <input type="text" id="join-room-id" placeholder="Inserisci ID Stanza" class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600">
-            </label>
-
-            <button id="join-room-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition duration-200 shadow-md">Unisciti</button>
-            <div id="join-room-status" class="mt-4 p-3 text-center rounded-lg bg-gray-700 hidden"></div>
-        </div>
-
-        <!-- Schermo di Attesa (Lobby) -->
-        <div id="lobby" class="hidden max-w-4xl mx-auto bg-gray-800 p-8 rounded-xl shadow-2xl">
-            <h2 class="text-3xl font-bold mb-6 text-center text-blue-400">Lobby di Gioco</h2>
-            <p id="lobby-id" class="text-xl font-mono text-gray-400 mb-4 text-center"></p>
-
-            <div id="lobby-players" class="mb-6 flex flex-col gap-3">
-                <h3 class="text-xl font-semibold mb-2">Giocatori Attuali:</h3>
-                <!-- Lista giocatori -->
-            </div>
-
-            <div id="lobby-settings" class="mb-6 p-4 bg-gray-700 rounded-lg">
-                <h3 class="text-xl font-semibold mb-2">Impostazioni:</h3>
-                <!-- Impostazioni stanza -->
-            </div>
-
-            <button id="start-game-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition duration-200 shadow-md hidden">Avvia Partita (Host)</button>
-            <p id="wait-message" class="text-center text-yellow-400 mt-3 hidden">In attesa che l'Host avvii la partita...</p>
-            <button id="leave-lobby-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition duration-200 shadow-md mt-4">Abbandona Lobby</button>
-            <div id="lobby-message" class="mt-4 p-3 text-center rounded-lg bg-gray-700 hidden"></div>
-        </div>
-
-        <!-- Schermo di Gioco - BATTAGLIA -->
-        <div id="game-screen" class="hidden w-full mx-auto">
-            <div class="flex justify-between items-center mb-4 p-3 bg-gray-800 rounded-lg shadow-xl">
-                <div class="flex-1">Turno di: <span id="current-player-name" class="font-bold text-yellow-400"></span></div>
-                <div class="flex-1 text-center">Modalità: <span id="game-mode-display" class="font-bold"></span></div>
-                <div class="flex-1 text-right">Mazzo Rimanente: <span id="deck-left-count" class="font-bold">0</span></div>
-            </div>
-
-            <!-- TAVOLO DA GIOCO (Nuovo Layout) -->
-            <div id="battle-table">
-                <!-- I giocatori verranno posizionati qui via JS -->
-                
-                <!-- Placeholder per quando è vuoto -->
-                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span class="text-white opacity-20 text-6xl font-bold">VS</span>
-                </div>
-            </div>
-
-            <!-- Log delle Mosse -->
-            <div id="move-log" class="mb-4 max-h-32 overflow-y-auto p-3 bg-gray-900 rounded-lg text-sm border border-gray-700">
-                <p class="text-gray-500">Inizio Partita...</p>
-            </div>
-
-            <!-- Area Azioni/Selezione Carta/Mossa -->
-            <div id="action-area" class="bg-gray-800 p-6 rounded-xl shadow-2xl">
-                <h3 class="text-xl font-semibold mb-4 text-center">Azioni</h3>
-
-                <!-- Stato di attesa/messaggi -->
-                <div id="game-message" class="p-3 text-center rounded-lg bg-blue-800 mb-4 hidden"></div>
-
-                <!-- 1. Selezione Carta di Sostituzione (Quando una carta muore) -->
-                <div id="select-replacement" class="hidden">
-                    <h4 class="text-lg font-bold mb-3 text-yellow-400">Scegli una carta dal Deck per sostituire <span id="defeated-card-name"></span></h4>
-                    <div id="replacement-deck-cards" class="flex flex-wrap gap-3 justify-center">
-                        <!-- Carte del deck verranno iniettate qui -->
-                    </div>
-                </div>
-
-                <!-- 2. Selezione Mossa e Bersaglio -->
-                <div id="select-move-target" class="hidden">
-                    <h4 class="text-lg font-bold mb-3 text-green-400">Seleziona la tua Carta e la Mossa</h4>
-                    <div class="flex flex-wrap justify-center gap-4 mb-4">
-                        <div id="active-card-selection" class="flex flex-col gap-2">
-                            <!-- Bottoni per la selezione della carta attiva -->
-                        </div>
-                    </div>
-
-                    <div id="move-selection" class="flex flex-col gap-2 mb-4">
-                        <h5 class="text-md font-semibold text-gray-400">Mosse di <span id="selected-card-move-name">...</span>:</h5>
-                        <!-- Bottoni per le mosse -->
-                    </div>
-
-                    <div id="target-selection" class="hidden">
-                        <h5 class="text-md font-semibold text-gray-400">Seleziona il Bersaglio (Avversario):</h5>
-                        <div id="target-buttons" class="flex flex-wrap gap-2 justify-center">
-                            <!-- Bottoni per i bersagli -->
-                        </div>
-                    </div>
-                    <button id="execute-move-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200 mt-4" disabled>Esegui Mossa</button>
-                </div>
-            </div>
-
-            <!-- Schermo Risultati Partita -->
-            <div id="game-results" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center hidden z-50">
-                <div class="bg-gray-800 p-8 rounded-xl shadow-2xl max-w-lg w-full text-center border-4 border-yellow-500">
-                    <h3 class="text-4xl font-extrabold mb-4 text-yellow-400">PARTITA FINITA!</h3>
-                    <p id="result-message" class="text-2xl mb-6"></p>
-
-                    <div class="text-left mb-6">
-                        <h4 class="text-xl font-bold mb-2 text-green-400">La tua Ricompensa:</h4>
-                        <ul id="rewards-list" class="list-disc list-inside ml-4">
-                            <!-- Ricompense -->
-                        </ul>
-                    </div>
-
-                    <button onclick="leaveGameSession()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200">Torna al Menu Principale</button>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // CONFIGURAZIONE REALE DELL'UTENTE (INSERITA AUTOMATICAMENTE)
-        const appId = "questo-fight-carte-v1";
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyBdpG1mS6k-MLlRnvV6W186Wi6otxhpj-0",
-            authDomain: "questo-fight-carte.firebaseapp.com",
-            projectId: "questo-fight-carte",
-            storageBucket: "questo-fight-carte.firebasestorage.app",
-            messagingSenderId: "1097999779658",
-            appId: "1:1097999779658:web:2261972f9e9189626e63b3",
-            measurementId: "G-NRQDHRCZWW"
-        };
-        
-        // Per il web pubblico non usiamo token personalizzati, ma login anonimo
-        const initialAuthToken = null;
-
-        // Inizializzazione Firebase
-        let app, db, auth;
-        let userId = null;
-        let userData = null;
-        let cardDefinitions = {};
-        let currentRoomId = null;
-        let gameSessionListener = null;
-
-        // Struttura fittizia delle carte per superare il requisito delle 100 carte
-        const __BASE_CARD_LIST = [
-            { name: "Aang", img: "https://i.pinimg.com/736x/05/01/fc/0501fc8ed44f7bd4ad9e74d9bb959669.jpg", ability: "Mago" },
-            { name: "Ametista", img: "https://i.pinimg.com/736x/11/b5/05/11b5056b41f87fbe3120b68ed5dcfb09.jpg", ability: "Protettivo" },
-            { name: "Barry", img: "https://i.pinimg.com/736x/ae/01/6c/ae016c6828620c2b981bbf92fd1219d4.jpg", ability: "Guerriero" },
-            { name: "Beast Boy", img: "https://i.pinimg.com/736x/65/aa/b8/65aab8f95425cdff2010d6224b0a6ea3.jpg", ability: "Alieno" },
-            { name: "Ben 10", img: "https://i.pinimg.com/736x/ad/5c/cd/ad5ccdba073abda30c152f7eac48447b.jpg", ability: "Alieno" },
-            { name: "Bloom", img: "https://i.pinimg.com/736x/2a/0e/3d/2a0e3d2c81ef601a4dc4647fe888b1a0.jpg", ability: "Mago" },
-            { name: "Bowser", img: "https://i.pinimg.com/1200x/cf/3f/ec/cf3fec1f6b9334e0255065f150fa97a9.jpg", ability: "Guerriero" },
-            { name: "Bugs Bunny", img: "https://i.pinimg.com/1200x/ff/d1/66/ffd166e976132eb05bf59b5339a01931.jpg", ability: "Lanciatore" },
-            { name: "Camilla", img: "https://i.pinimg.com/1200x/e3/82/72/e382726630f62a8a716009aab16cafc6.jpg", ability: "Curatore" },
-            { name: "Carlos Oliveira", img: "https://i.pinimg.com/736x/9c/d7/61/9cd7611ff4aaceecd802b75a2d2ad1f6.jpg", ability: "Guerriero" },
-            { name: "Cell Perfetto", img: "https://i.pinimg.com/736x/cd/e2/4c/cde24ca1463975e32a513dcd96d20cae.jpg", ability: "Alieno" },
-            { name: "Chat Noir", img: "https://i.pinimg.com/736x/c3/ed/77/c3ed7755f4cbee4cd34316139d132597.jpg", ability: "Lanciatore" },
-            { name: "Chef Hatchet", img: "https://i.pinimg.com/1200x/4f/7c/8b/4f7c8bc30de9875dba940c17fcd6264a.jpg", ability: "Protettivo" },
-            { name: "Corvina", img: "https://i.pinimg.com/736x/fc/e3/30/fce330b50ce9cbf53287e441be15d597.jpg", ability: "Mago" },
-            { name: "Cosmo", img: "https://i.pinimg.com/736x/47/22/99/472299b4c669c052c662df1730403d83.jpg", ability: "Curatore" },
-            { name: "Cyborg", img: "https://i.pinimg.com/736x/bc/ef/b9/bcefb901b8a25aaf2716e142e9cf89a9.jpg", ability: "Guerriero" },
-            { name: "Daffy Duck", img: "https://i.pinimg.com/736x/be/a3/7e/bea37edf64883f0cebaa6899c9fbad71.jpg", ability: "Lanciatore" },
-            { name: "Darwin Watterson", img: "https://i.pinimg.com/736x/44/ad/5f/44ad5f25f6dae6e19757b15346684583.jpg", ability: "Protettivo" },
-            { name: "Conan", img: "https://i.pinimg.com/736x/77/e4/e9/77e4e9ddb6f514b151c15d16b0cf207d.jpg", ability: "Mago" },
-            { name: "Doraemon", img: "https://i.pinimg.com/736x/b1/75/de/b175de80fb0f5ca9b5230f0b12f3c13c.jpg", ability: "Alieno" },
-            { name: "Elsa", img: "https://i.pinimg.com/736x/0a/e9/e8/0ae9e8606e505a0315e105b73a96e387.jpg", ability: "Mago" },
-            { name: "Empoleon", img: "https://i.pinimg.com/1200x/b2/52/ea/b252eac40b5327d0691ddf9e6c9ec7d3.jpg", ability: "Lanciatore" },
-            { name: "Eric Cartman", img: "https://i.pinimg.com/736x/31/3a/b7/313ab7f6d385f544ffc90681ae08c117.jpg", ability: "Protettivo" },
-            { name: "Ferb", img: "https://i.pinimg.com/736x/63/04/d3/6304d368076442119f65936ca107067c.jpg", ability: "Curatore" },
-            { name: "Fiore", img: "https://i.pinimg.com/736x/68/af/9d/68af9d02e5917aec2649f4efc32fad75.jpg", ability: "Mago" },
-            { name: "Finn", img: "https://i.pinimg.com/736x/29/83/75/298375aacfcc94f3310fad5578000f6d.jpg", ability: "Guerriero" },
-            { name: "Francine Smith", img: "https://i.pinimg.com/736x/18/c1/d2/18c1d2489a64b1b4f9cc78318e62da94.jpg", ability: "Protettivo" },
-            { name: "Garnet", img: "https://i.pinimg.com/736x/65/9b/d2/659bd260c80c7ecb1e2c1d7c7c3e9508.jpg", ability: "Guerriero" },
-            { name: "Ganyu", img: "https://i.pinimg.com/736x/46/db/7e/46db7e6db045ac28eff3a551e7754d50.jpg", ability: "Lanciatore" },
-            { name: "Giyu", img: "https://i.pinimg.com/736x/fa/78/dd/fa78ddb22728f7ae661b3c18615d1d68.jpg", ability: "Guerriero" },
-            { name: "Grizzly", img: "https://i.pinimg.com/1200x/2c/0a/98/2c0a980377e0a6befa3b4e7fb50be361.jpg", ability: "Protettivo" },
-            { name: "Gumball", img: "https://i.pinimg.com/736x/af/61/0f/af610f55e819f4bd3f37e5001a2b19ee.jpg", ability: "Lanciatore" },
-            { name: "Gwen", img: "https://i.pinimg.com/736x/3e/67/48/3e6748b9ba3f30cda452f7209bba5037.jpg", ability: "Mago" },
-            { name: "Harley Quinn", img: "https://i.pinimg.com/736x/96/f6/79/96f679f3aef0b96235ed23dd023f164d.jpg", ability: "Lanciatore" },
-            { name: "Homer Simpson", img: "https://i.pinimg.com/1200x/1d/b9/18/1db918fe2b5dff69f35186ad20cc1752.jpg", ability: "Protettivo" },
-            { name: "Jake", img: "https://i.pinimg.com/736x/cb/96/5a/cb965ab6c13eaf52f182474b6fc9a7d1.jpg", ability: "Alieno" },
-            { name: "Jerry", img: "https://i.pinimg.com/736x/be/2f/e1/be2fe1bde39e5005bdc4cea479dcf6f7.jpg", ability: "Lanciatore" },
-            { name: "Johnny Bravo", img: "https://i.pinimg.com/736x/b4/cd/95/b4cd959a9bb7efaf289ba3e4ae85d4b8.jpg", ability: "Guerriero" },
-            { name: "Katara", img: "https://i.pinimg.com/736x/00/14/5e/00145ebb0ae3ae4b2af824d831faf313.jpg", ability: "Curatore" },
-            { name: "Kirby", img: "https://i.pinimg.com/736x/ba/e6/63/bae6637b3efecfd002f0c1f9605e53be.jpg", ability: "Alieno" },
-            { name: "Kratos", img: "https://i.pinimg.com/736x/d9/d4/4f/d9d44f16329a4e72b4b8e45d41d83262.jpg", ability: "Guerriero" },
-            { name: "Ladybug", img: "https://i.pinimg.com/736x/72/32/f1/7232f16bdab9dd11a2fa77403a1fe9f1.jpg", ability: "Protettivo" },
-            { name: "Lapis", img: "https://i.pinimg.com/1200x/09/fb/12/09fb12467957da96913fc8f75e6f6356.jpg", ability: "Mago" },
-            { name: "Leavanny", img: "https://i.pinimg.com/736x/72/b6/ff/72b6ffcd1396128f0f2235281171bc92.jpg", ability: "Curatore" },
-            { name: "Leela", img: "https://i.pinimg.com/1200x/6e/c8/b6/6ec8b67dc6bb062afc2007495b041e84.jpg", ability: "Lanciatore" },
-            { name: "Leon Kennedy", img: "https://i.pinimg.com/736x/0a/e9/e8/0a27cd44aae181df0884d85bf18d0574.jpg", ability: "Guerriero" },
-            { name: "Link", img: "https://i.pinimg.com/736x/be/29/0a/be290ac4f5b6f1de6f88ee2099e04da1.jpg", ability: "Guerriero" },
-            { name: "Lisa Simpson", img: "https://i.pinimg.com/736x/bf/df/10/bfdf10aa4399efd5fc1430601b589613.jpg", ability: "Curatore" },
-            { name: "Lola Bunny", img: "https://i.pinimg.com/1200x/ee/12/ad/ee12ad4d87c9f5e3bafb2e1bc9676439.jpg", ability: "Lanciatore" },
-            { name: "Lucario", img: "https://i.pinimg.com/1200x/6f/bf/ab/6fbfab2a5aceb54d48323128e7a10ae4.jpg", ability: "Guerriero" },
-            { name: "Luigi", img: "https://i.pinimg.com/1200x/0b/49/30/0b49308522463829166e76b0d914c8b8.jpg", ability: "Protettivo" },
-            { name: "Marceline", img: "https://i.pinimg.com/736x/bb/93/5e/bb935e39f2d66248b6e4178227bdb233.jpg", ability: "Mago" },
-            { name: "Mario", img: "https://i.pinimg.com/736x/61/62/b5/6162b56bc61a4050bb34d7203e03642d.jpg", ability: "Guerriero" },
-            { name: "Mewtwo", img: "https://i.pinimg.com/1200x/14/58/63/145863e7d3907cda7d679130e0066014.jpg", ability: "Alieno" },
-            { name: "Mia", img: "https://i.pinimg.com/736x/f0/5b/f1/f05bf1f89011521e38e5729e6cb9596f.jpg", ability: "Curatore" },
-            { name: "Mimikyu", img: "https://i.pinimg.com/1200x/7f/c3/98/7fc3984347358acee07cf91f2ed1d0ff.jpg", ability: "Alieno" },
-            { name: "Mordecai", img: "https://i.pinimg.com/736x/4f/2e/04/4f2e04cace599c4433a84b490d12c2a4.jpg", ability: "Lanciatore" },
-            { name: "Morty", img: "https://i.pinimg.com/736x/95/5c/dc/955cdc707097b8546e167c2188c4b5df.jpg", ability: "Protettivo" },
-            { name: "Ned Flanders", img: "https://pbs.twimg.com/media/Fenv8bnWIAIdub7.jpg:large", ability: "Curatore" },
-            { name: "Nicole Watterson", img: "https://i.pinimg.com/736x/81/24/e4/8124e43da43e1d06dcdbca15f22a0cd9.jpg", ability: "Guerriero" },
-            { name: "Oggy", img: "https://i.pinimg.com/736x/ca/8a/de/ca8ade9acdf1115e9364fd30abd41754.jpg", ability: "Lanciatore" },
-            { name: "Olaf", img: "https://i.pinimg.com/736x/a5/d4/2f/a5d42f86e89066cb61ebafe1f8a47fa7.jpg", ability: "Protettivo" },
-            { name: "Orso Bianco", img: "https://i.pinimg.com/736x/9c/36/59/9c3659e69419f16abe572e4241667bcd.jpg", ability: "Guerriero" },
-            { name: "Panda", img: "https://i.pinimg.com/1200x/cf/d2/85/cfd285a97021713f6f5cada516043233.jpg", ability: "Curatore" },
-            { name: "Pantera Rosa", img: "https://i.pinimg.com/736x/9a/f9/09/9af9099c905afbd33773eb4d110d1d01.jpg", ability: "Lanciatore" },
-            { name: "Patrick Stella", img: "https://i.pinimg.com/1200x/27/e0/2e/27e02eadbe6a321a7d0a9641a394c811.jpg", ability: "Protettivo" },
-            { name: "Perla", img: "https://i.pinimg.com/736x/7b/2e/b7/7b2eb73a3f511efa5bc182d1db60191b.jpg", ability: "Mago" },
-            { name: "Perry l'Ornitorinco", img: "https://i.pinimg.com/736x/59/f2/98/59f29865a1e5fd69d69984b4a8d91729.jpg", ability: "Lanciatore" },
-            { name: "Peter Griffin", img: "https://i.pinimg.com/736x/9e/40/74/9e4074bbe7890cd245b51b9ff5c0e33c.jpg", ability: "Protettivo" },
-            { name: "Phineas", img: "https://i.pinimg.com/736x/cf/84/b5/cf84b5f2d0db3addab2509f12dbcfe82.jpg", ability: "Curatore" },
-            { name: "Pikachu", img: "https://i.pinimg.com/736x/ad/65/b6/ad65b669746561313925ffff392518bc.jpg", ability: "Lanciatore" },
-            { name: "Ponygon", img: "https://i.pinimg.com/1200x/4a/ee/29/4aee29b5bc03c3f3dfbec858428e86a9.jpg", ability: "Guerriero" },
-            { name: "Princess Peach", img: "https://i.pinimg.com/736x/fc/bc/da/fcbcda0aa38a8183012999fe9a5dd896.jpg", ability: "Curatore" },
-            { name: "Rapunzel", img: "https://i.pinimg.com/736x/65/e7/25/65e725cdfbff5c4faa067bd452a1e6cd.jpg", ability: "Curatore" },
-            { name: "Regina degli Arcieri", img: "https://i.pinimg.com/1200x/b9/d1/20/b9d120ce9e276c6e039b33504aeea42a.jpg", ability: "Lanciatore" },
-            { name: "Rena Rouge", img: "https://i.pinimg.com/736x/de/9d/47/de9d4781d1e2a1956088db188b16dbfc.jpg", ability: "Mago" },
-            { name: "Re Julien", img: "https://i.pinimg.com/736x/1e/17/19/1e17194ef5b383e4202fbb4875cfbd81.jpg", ability: "Protettivo" },
-            { name: "Mortino", img: "https://i.pinimg.com/736x/2e/c7/f4/2ec7f474dc3b202326fdc97feddca207.jpg", ability: "Curatore" },
-            { name: "Skipper", img: "https://i.pinimg.com/736x/e6/f0/5b/e6f05b20dda962344721db983c882679.jpg", ability: "Lanciatore" },
-            { name: "Lord Farquaad", img: "https://i.pinimg.com/736x/35/93/ac/3593acb0b8f9d75704f5a0778c693e73.jpg", ability: "Guerriero" }
-        ];
-
-        // Aggiungi 20 carte fittizie per arrivare a 100+
-        const additionalCards = [
-            { name: "GigaChad", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=GigaChad", ability: "Guerriero" },
-            { name: "AstroBot", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=AstroBot", ability: "Alieno" },
-            { name: "ZenMaster", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=ZenMaster", ability: "Curatore" },
-            { name: "TechNinja", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=TechNinja", ability: "Lanciatore" },
-            { name: "Guardian", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Guardian", ability: "Protettivo" },
-            { name: "Vortex", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Vortex", ability: "Mago" },
-            { name: "Blazer", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Blazer", ability: "Guerriero" },
-            { name: "Echo", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Echo", ability: "Lanciatore" },
-            { name: "HealBot", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=HealBot", ability: "Curatore" },
-            { name: "WallMan", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=WallMan", ability: "Protettivo" },
-            { name: "RuneSmith", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=RuneSmith", ability: "Mago" },
-            { name: "Zorp", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Zorp", ability: "Alieno" },
-            { name: "Gladiator", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Gladiator", ability: "Guerriero" },
-            { name: "Sniper", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Sniper", ability: "Lanciatore" },
-            { name: "Lifesaver", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Lifesaver", ability: "Curatore" },
-            { name: "Sentinel", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Sentinel", ability: "Protettivo" },
-            { name: "WitchDoc", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=WitchDoc", ability: "Mago" },
-            { name: "Xenomorph", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Xenomorph", ability: "Alieno" },
-            { name: "Berserk", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Berserk", ability: "Guerriero" },
-            { name: "Teleporter", img: "https://placehold.co/150x200/5082E4/FFFFFF?text=Teleporter", ability: "Mago" },
-            { name: "Brago", img: "https://i.pinimg.com/1200x/7f/28/31/7f283141b761fee05de62cd51f4926ee.jpg", ability: "Guerriero" }, // Carta aggiunta in ritardo
-            { name: "Belgim E.O", img: "https://m.media-amazon.com/images/M/MV5BODhhYWMxNzMtZGY2NS00MmM1LWI5OWItZjU1N2ZiNDA5NTI1XkEyXkFqcGc@._V1_.jpg", ability: "Protettivo" } // Carta aggiunta in ritardo
-        ];
-
-        const __CARD_DEFINITIONS = [...__BASE_CARD_LIST, ...additionalCards].reduce((acc, card) => {
-            // Statistiche base bilanciate
-            let baseHP = 100, baseATK = 20, baseDEF = 10;
-            switch (card.ability) {
-                case "Guerriero": baseHP = 120; baseATK = 25; baseDEF = 15; break;
-                case "Lanciatore": baseHP = 90; baseATK = 30; baseDEF = 5; break;
-                case "Curatore": baseHP = 110; baseATK = 10; baseDEF = 15; break;
-                case "Protettivo": baseHP = 130; baseATK = 10; baseDEF = 20; break;
-                case "Mago": baseHP = 100; baseATK = 20; baseDEF = 10; break;
-                case "Alieno": baseHP = 105; baseATK = 22; baseDEF = 13; break;
-            }
-
-            // Mosse base (almeno 3)
-            const moves = [
-                { name: "Attacco Base", damage: baseATK, targets: 1, type: "damage" },
-                { name: `Abilità ${card.ability}`, damage: Math.floor(baseATK * 0.5), targets: 1, type: "special" },
-                { name: "Super Colpo", damage: Math.floor(baseATK * 1.5), targets: 1, type: "damage" }
-            ];
-
-            acc[card.name] = {
-                ...card,
-                hp: baseHP,
-                maxHp: baseHP,
-                attack: baseATK,
-                defense: baseDEF,
-                moves: moves,
-                shopPrice: Math.floor(Math.random() * (500 - 200 + 1) + 200), // Prezzo casuale 200-500
-                id: card.name.toLowerCase().replace(/\s/g, '-')
-            };
-            return acc;
-        }, {});
-
-        // Funzioni di supporto globali
-        window.showScreen = (screenId) => {
-            document.querySelectorAll('#app > div').forEach(el => {
-                if (el.id !== 'loading-screen') {
-                    el.classList.add('hidden');
-                }
-            });
-            document.getElementById(screenId).classList.remove('hidden');
-            // Aggiorna dati specifici dello schermo
-            if (screenId === 'main-menu') {
-                updateUserInfo();
-            } else if (screenId === 'deck-manager') {
-                renderDeckManager();
-            } else if (screenId === 'shop') {
-                renderShop();
-            }
+        // --- TUE CHIAVI FIREBASE INSERITE ---
+        const MANUAL_CONFIG = {
+            apiKey: "AIzaSyBm_dLeu-Q6TwvTxmS9gyXAQxXqQHRF2GA",
+            authDomain: "td-interaction.firebaseapp.com",
+            projectId: "td-interaction",
+            storageBucket: "td-interaction.firebasestorage.app",
+            messagingSenderId: "916995350556",
+            appId: "1:916995350556:web:accd878a4497c862107fd9"
         };
 
-        const generateRandomDeck = () => {
-            const allCardIds = Object.keys(__CARD_DEFINITIONS);
-            const shuffled = allCardIds.sort(() => 0.5 - Math.random());
-            return shuffled.slice(0, 10);
+        const getFirebaseConfig = () => {
+            return MANUAL_CONFIG;
         };
 
-        const updateUserData = async (updates) => {
-            if (!userId) {
-                console.error("Tentativo di aggiornare i dati utente senza ID.");
-                return;
-            }
-            try {
-                // FIXED: Percorso corretto con numero pari di segmenti
-                const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/data/profile`);
-                await updateDoc(userDocRef, updates);
-                userData = { ...userData, ...updates }; // Aggiorna la variabile locale
-                updateUserInfo();
-            } catch (error) {
-                console.error("Errore nell'aggiornamento dei dati utente:", error);
-                document.getElementById('status-message').textContent = `Errore salvataggio: ${error.message}`;
-                document.getElementById('status-message').classList.remove('hidden');
-                setTimeout(() => document.getElementById('status-message').classList.add('hidden'), 5000);
-            }
+        const getAppId = () => {
+            return "total-drama-public-game"; 
         };
 
-        const updateUserInfo = () => {
-            if (userData) {
-                const nickname = userData.nickname || 'Anonimo';
-                document.getElementById('user-info').textContent = `ID: ${userId.substring(0, 5)}... | Nickname: ${nickname}`;
-                document.getElementById('user-coins').textContent = `${userData.coins || 0} Monete`;
-                document.getElementById('nickname-input').value = nickname;
-                document.getElementById('nickname-setup').classList.toggle('hidden', !!userData.nickname);
-                document.getElementById('deck-manager').querySelector('#deck-error-message').classList.toggle('hidden', userData.deck.length === 0);
-            }
-        };
+        const firebaseConfig = getFirebaseConfig();
 
-        const loadUserAndListen = async (uid) => {
-            try {
-                // FIXED: Percorso corretto con numero pari di segmenti
-                const userDocRef = doc(db, `artifacts/${appId}/users/${uid}/data/profile`);
-                
-                // onSnapshot per l'aggiornamento in tempo reale
-                onSnapshot(userDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        userData = docSnap.data();
-                        console.log("Dati utente caricati/aggiornati:", userData);
-                        updateUserInfo();
-                    } else {
-                        // Nuovo utente: crea profilo iniziale
-                        const initialDeck = generateRandomDeck();
-                        userData = {
-                            nickname: '',
-                            coins: 500, // Monete iniziali
-                            unlockedCards: initialDeck,
-                            deck: initialDeck,
-                            wins: 0,
-                            losses: 0,
-                            lastPlayed: new Date().toISOString()
-                        };
-                        setDoc(userDocRef, userData).then(() => {
-                            console.log("Profilo utente iniziale creato.");
-                            updateUserInfo();
-                        });
-                    }
-                    showScreen('main-menu');
-                }, (error) => {
-                    console.error("Errore onSnapshot utente:", error);
-                });
-
-            } catch (error) {
-                console.error("Errore nel caricamento del profilo utente:", error);
-                document.getElementById('loading-screen').innerHTML = `<p class="text-red-500">Errore di caricamento: ${error.message}</p>`;
-            }
-        };
-
-        const initializeAppAndAuth = async () => {
-            try {
-                if (Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Configurazione Firebase non trovata.");
-                }
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                setLogLevel('Debug');
-
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        try {
-                            const cardsCollectionRef = collection(db, `artifacts/${appId}/public/data`, 'cards');
-                            const cardsSnapshot = await getDocs(cardsCollectionRef);
-                            if (cardsSnapshot.empty) {
-                                console.log("Popolamento collezione carte...");
-                                for (const name in __CARD_DEFINITIONS) {
-                                    const card = __CARD_DEFINITIONS[name];
-                                    await setDoc(doc(cardsCollectionRef, card.id), card);
-                                }
-                                console.log("Collezione carte popolata.");
-                            }
-                        } catch (e) {
-                            console.warn("Impossibile inizializzare carte DB:", e);
-                        }
-
-                        loadUserAndListen(userId);
-                    } else {
-                        console.log("Nessun utente loggato.");
-                    }
-                });
-
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-            } catch (error) {
-                console.error("Errore fatale nell'inizializzazione:", error);
-                document.getElementById('loading-screen').innerHTML = `<p class="text-red-500">Errore: ${error.message}</p>`;
-            }
-        };
-
-        // --- Logica di Gioco e Funzioni UI ---
-
-        const createCardHTML = (cardDef, deckAction = null, inBattle = false) => {
-            if (!cardDef) return '';
-            const currentCardData = userData && userData.deck ? (userData.deck.find(c => c.id === cardDef.id) || cardDef) : cardDef; 
-            const isDecked = userData && userData.deck ? userData.deck.includes(cardDef.id) : false;
-
-            // Aggiungi un'immagine di fallback nel caso in cui l'URL sia problematico
-            const imgUrl = cardDef.img || `https://placehold.co/150x150/5082E4/FFFFFF?text=${cardDef.name}`;
-
-            let actionButton = '';
-            if (deckAction === 'collection') {
-                actionButton = `<button data-card-id="${cardDef.id}" onclick="toggleDeck(this)" class="mt-auto w-full py-1 text-xs rounded transition duration-200 ${isDecked ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}">
-                    ${isDecked ? 'Rimuovi' : 'Aggiungi'}
-                </button>`;
-            } else if (deckAction === 'shop') {
-                const canAfford = userData.coins >= cardDef.shopPrice;
-                const isUnlocked = userData.unlockedCards.includes(cardDef.id);
-                actionButton = `<button data-card-id="${cardDef.id}" data-price="${cardDef.shopPrice}" onclick="buyCard(this)" ${!canAfford || isUnlocked ? 'disabled' : ''} class="mt-auto w-full py-1 text-xs rounded transition duration-200 ${canAfford ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-gray-500'} disabled:opacity-50">
-                    ${isUnlocked ? 'Sbloccata' : `${cardDef.shopPrice} Monete`}
-                </button>`;
-            }
-
-            // Se siamo in battaglia, non mostrare HP/ATK/DEF statici qui, verranno gestiti dal renderPlayerField dinamico
-            const statsBlock = inBattle ? '' : `
-                <div class="stats w-full text-left text-xs mb-1">
-                    <p class="text-red-400">HP: ${currentCardData.hp} / ${cardDef.maxHp}</p>
-                    <p class="text-green-400">ATK: ${cardDef.attack}</p>
-                    <p class="text-blue-400">DEF: ${cardDef.defense}</p>
-                </div>
-            `;
-
-            return `
-                <div class="card-container">
-                    <div class="card ability-${cardDef.ability.toLowerCase()}">
-                        <div class="card-front text-xs">
-                            <h4 class="text-sm font-bold text-center mb-1 w-full card-name-text" title="${cardDef.name}">${cardDef.name}</h4>
-                            <img src="${imgUrl}" onerror="this.onerror=null;this.src='https://placehold.co/150x150/5082E4/FFFFFF?text=${cardDef.name.substring(0, 10)}'" class="w-16 h-16 rounded-full object-cover mb-1 border-2 border-gray-600">
-                            ${statsBlock}
-                            <p class="text-xs font-semibold text-center text-gray-400 mt-auto mb-1">${cardDef.ability}</p>
-                            ${actionButton}
-                        </div>
-                    </div>
-                </div>
-            `;
-        };
-
-        window.renderDeckManager = () => {
-            if (!userData) return;
-
-            const deckContainer = document.getElementById('current-deck-cards');
-            const collectionContainer = document.getElementById('collection-cards');
-            const collectionCount = document.getElementById('collection-count');
-            const deckCount = document.getElementById('deck-count');
-
-            deckContainer.innerHTML = '';
-            collectionContainer.innerHTML = '';
-
-            // 1. Renderizza Deck Attuale
-            const deckCardDefs = userData.deck.map(id => __CARD_DEFINITIONS[id]).filter(c => c);
-            deckCardDefs.forEach(cardDef => {
-                deckContainer.innerHTML += createCardHTML(cardDef, 'collection');
-            });
-            if (deckCardDefs.length === 0) {
-                 deckContainer.innerHTML = '<p class="text-gray-500 mt-8">Deck vuoto. Aggiungi carte dalla tua Collezione.</p>';
-            }
-
-            // 2. Renderizza Collezione
-            const collectionCardDefs = userData.unlockedCards.map(id => __CARD_DEFINITIONS[id]).filter(c => c);
-            collectionCardDefs.forEach(cardDef => {
-                collectionContainer.innerHTML += createCardHTML(cardDef, 'collection');
-            });
-
-            deckCount.textContent = `${userData.deck.length}`;
-            collectionCount.textContent = `${userData.unlockedCards.length}`;
-        };
-
-        window.toggleDeck = async (button) => {
-            const cardId = button.getAttribute('data-card-id');
-            const cardName = __CARD_DEFINITIONS[cardId].name;
-            const deck = [...userData.deck];
-            const maxDeckSize = 10;
-            const errorMessageEl = document.getElementById('deck-error-message');
-            errorMessageEl.classList.add('hidden');
-
-            if (deck.includes(cardId)) {
-                // Rimuovi
-                const newDeck = deck.filter(id => id !== cardId);
-                await updateUserData({ deck: newDeck });
-                console.log(`Carta ${cardName} rimossa dal deck.`);
-            } else {
-                // Aggiungi
-                if (deck.length < maxDeckSize) {
-                    deck.push(cardId);
-                    await updateUserData({ deck: deck });
-                    console.log(`Carta ${cardName} aggiunta al deck.`);
-                } else {
-                    errorMessageEl.textContent = `Impossibile aggiungere ${cardName}. Il deck è pieno (Max ${maxDeckSize} carte).`;
-                    errorMessageEl.classList.remove('hidden');
-                }
-            }
-            renderDeckManager(); // Ricarica l'UI
-        };
-
-        window.renderShop = () => {
-            if (!userData) return;
-            document.getElementById('shop-coins').textContent = userData.coins;
-            const shopList = document.getElementById('shop-cards-list');
-            shopList.innerHTML = '';
-
-            // Renderizza tutte le carte nello shop
-            const allCardDefs = Object.values(__CARD_DEFINITIONS);
-
-            allCardDefs.sort((a, b) => a.shopPrice - b.shopPrice); // Ordina per prezzo
-
-            allCardDefs.forEach(cardDef => {
-                const isUnlocked = userData.unlockedCards.includes(cardDef.id);
-                // Non mostrare le carte già sbloccate per non appesantire lo shop, a meno che non sia una carta comune.
-                if (!isUnlocked || cardDef.shopPrice < 250) {
-                    shopList.innerHTML += createCardHTML(cardDef, 'shop');
-                }
-            });
-        };
-
-        window.buyCard = async (button) => {
-            // FIX: Assicurati che i tipi siano corretti
-            const cardId = button.getAttribute('data-card-id');
-            const price = parseInt(button.getAttribute('data-price'), 10);
-            
-            if (!__CARD_DEFINITIONS[cardId]) return;
-
-            const cardName = __CARD_DEFINITIONS[cardId].name;
-            const shopMessage = document.getElementById('shop-message');
-            shopMessage.classList.add('hidden');
-
-            // Verifica monete (confronto numerico sicuro)
-            if (parseInt(userData.coins) < price) {
-                shopMessage.textContent = "Non hai abbastanza monete per acquistare questa carta!";
-                shopMessage.classList.remove('hidden');
-                shopMessage.classList.add('bg-red-600');
-                return;
-            }
-            if (userData.unlockedCards.includes(cardId)) {
-                shopMessage.textContent = "Hai già sbloccato questa carta!";
-                shopMessage.classList.remove('hidden');
-                return;
-            }
-
-            const newCoins = parseInt(userData.coins) - price;
-            const newUnlockedCards = [...userData.unlockedCards, cardId];
-
-            await updateUserData({ coins: newCoins, unlockedCards: newUnlockedCards });
-
-            shopMessage.textContent = `Acquistato ${cardName} per ${price} monete!`;
-            shopMessage.classList.remove('hidden');
-            shopMessage.classList.remove('bg-red-600');
-            shopMessage.classList.add('bg-green-600');
-
-            renderShop(); // Ricarica lo shop immediatamente
-        };
-
-        document.getElementById('set-nickname-btn').addEventListener('click', async () => {
-            const nickname = document.getElementById('nickname-input').value.trim();
-            if (nickname.length > 2 && nickname.length <= 20) {
-                await updateUserData({ nickname: nickname });
-                document.getElementById('nickname-setup').classList.add('hidden');
-            } else {
-                document.getElementById('status-message').textContent = "Il nickname deve avere tra 3 e 20 caratteri.";
-                document.getElementById('status-message').classList.remove('hidden');
-                setTimeout(() => document.getElementById('status-message').classList.add('hidden'), 3000);
-            }
-        });
-
-        // --- Logica di Creazione e Join Stanza ---
-
-        document.getElementById('create-room-btn').addEventListener('click', async () => {
-            if (!userData.nickname) {
-                document.getElementById('room-status').textContent = "Devi impostare un nickname prima di creare una stanza!";
-                document.getElementById('room-status').classList.remove('hidden');
-                return;
-            }
-             if (userData.deck.length < parseInt(document.getElementById('deck-size-limit').value)) {
-                document.getElementById('room-status').textContent = `Il tuo deck non rispetta il limite impostato (minimo ${document.getElementById('deck-size-limit').value} carte).`;
-                document.getElementById('room-status').classList.remove('hidden');
-                return;
-            }
-
-            const mode = document.getElementById('game-mode').value;
-            const cpuEnabled = document.getElementById('cpu-enabled').value === 'yes';
-            const deckLimit = parseInt(document.getElementById('deck-size-limit').value);
-            const fieldLimit = parseInt(document.getElementById('field-size-limit').value);
-
-            try {
-                const roomData = {
-                    status: 'waiting',
-                    mode: mode,
-                    hostId: userId,
-                    hostName: userData.nickname,
-                    createdAt: new Date().toISOString(),
-                    settings: { cpu: cpuEnabled, deckLimit: deckLimit, fieldLimit: fieldLimit },
-                    players: {
-                        [userId]: { name: userData.nickname, isHost: true, status: 'ready', deck: userData.deck }
-                    }
-                };
-
-                const roomRef = await addDoc(collection(db, `artifacts/${appId}/public/data`, 'gameSessions'), roomData);
-                currentRoomId = roomRef.id;
-                await listenToGameSession(currentRoomId);
-                showScreen('lobby');
-            } catch (error) {
-                console.error("Errore nella creazione della stanza:", error);
-                document.getElementById('room-status').textContent = `Errore: ${error.message}`;
-                document.getElementById('room-status').classList.remove('hidden');
-            }
-        });
-
-        document.getElementById('join-room-btn').addEventListener('click', async () => {
-            const roomId = document.getElementById('join-room-id').value.trim();
-             if (!userData.nickname) {
-                document.getElementById('join-room-status').textContent = "Devi impostare un nickname prima di unirti a una stanza!";
-                document.getElementById('join-room-status').classList.remove('hidden');
-                return;
-            }
-            if (!roomId) return;
-
-            try {
-                const roomRef = doc(db, `artifacts/${appId}/public/data`, 'gameSessions', roomId);
-                const roomSnap = await getDoc(roomRef);
-
-                if (!roomSnap.exists()) {
-                    document.getElementById('join-room-status').textContent = "Stanza non trovata.";
-                    document.getElementById('join-room-status').classList.remove('hidden');
-                    return;
-                }
-
-                const room = roomSnap.data();
-                const maxPlayers = room.mode === '1v1' ? 2 : 4;
-                const playerCount = Object.keys(room.players).length;
-
-                if (room.status !== 'waiting' || playerCount >= maxPlayers) {
-                    document.getElementById('join-room-status').textContent = "Stanza piena o partita già iniziata.";
-                    document.getElementById('join-room-status').classList.remove('hidden');
-                    return;
-                }
-
-                if (userData.deck.length < room.settings.deckLimit) {
-                    document.getElementById('join-room-status').textContent = `Il tuo deck deve contenere almeno ${room.settings.deckLimit} carte per questa stanza.`;
-                    document.getElementById('join-room-status').classList.remove('hidden');
-                    return;
-                }
-
-                const newPlayers = { ...room.players,
-                    [userId]: { name: userData.nickname, isHost: false, status: 'ready', deck: userData.deck }
-                };
-
-                await updateDoc(roomRef, { players: newPlayers });
-                currentRoomId = roomId;
-                await listenToGameSession(currentRoomId);
-                showScreen('lobby');
-
-            } catch (error) {
-                console.error("Errore nell'unirsi alla stanza:", error);
-                document.getElementById('join-room-status').textContent = `Errore: ${error.message}`;
-                document.getElementById('join-room-status').classList.remove('hidden');
-            }
-        });
-
-        document.getElementById('leave-lobby-btn').addEventListener('click', leaveGameSession);
-
-        async function leaveGameSession() {
-            if (currentRoomId && userId) {
-                try {
-                    const roomRef = doc(db, `artifacts/${appId}/public/data`, 'gameSessions', currentRoomId);
-                    const roomSnap = await getDoc(roomRef);
-
-                    if (roomSnap.exists()) {
-                        const room = roomSnap.data();
-                        const { [userId]: _, ...remainingPlayers } = room.players;
-
-                        if (Object.keys(remainingPlayers).length === 0) {
-                            await deleteDoc(roomRef); // Cancella la stanza se è vuota
-                        } else if (room.hostId === userId) {
-                            // Se l'host se ne va, assegna un nuovo host o cancella
-                            const newHostId = Object.keys(remainingPlayers)[0];
-                            const updatedPlayers = { ...remainingPlayers, [newHostId]: { ...remainingPlayers[newHostId], isHost: true } };
-                            await updateDoc(roomRef, { hostId: newHostId, hostName: remainingPlayers[newHostId].name, players: updatedPlayers });
-                        } else {
-                            await updateDoc(roomRef, { players: remainingPlayers });
-                        }
-                    }
-                } catch (error) {
-                    console.warn("Errore nell'uscita dalla stanza/lobby:", error);
-                }
-            }
-            if (gameSessionListener) {
-                gameSessionListener(); // Ferma l'ascoltatore
-                gameSessionListener = null;
-            }
-            currentRoomId = null;
-            showScreen('main-menu');
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            console.log("Firebase collegato con successo!");
+        } catch (error) {
+            console.error("Errore inizializzazione Firebase:", error);
         }
 
-        const renderLobby = (roomData) => {
-            document.getElementById('lobby-id').textContent = `ID Stanza: ${roomData.id}`;
+        const appId = getAppId();
 
-            const isHost = roomData.hostId === userId;
-            document.getElementById('start-game-btn').classList.toggle('hidden', !isHost);
-            document.getElementById('wait-message').classList.toggle('hidden', isHost);
+        // --- COSTANTI ---
+        const SEASON_CONFIG = [
+          { name: "L'Isola", bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073&auto=format&fit=crop", theme: "Spiaggia" },
+          { name: "Azione", bg: "https://images.unsplash.com/photo-1478720568477-152d9b164e63?q=80&w=2000&auto=format&fit=crop", theme: "Cinema" },
+          { name: "World Tour", bg: "https://images.unsplash.com/photo-1559586616-361e18714958?q=80&w=2070&auto=format&fit=crop", theme: "Aereo" }
+        ];
 
-            // Renderizza i giocatori
-            const playersDiv = document.getElementById('lobby-players');
-            playersDiv.innerHTML = '<h3 class="text-xl font-semibold mb-2">Giocatori Attuali:</h3>';
-            Object.values(roomData.players).forEach(player => {
-                playersDiv.innerHTML += `
-                    <div class="p-3 rounded-lg bg-gray-700 flex justify-between items-center">
-                        <span class="font-bold">${player.name} ${player.isHost ? '(Host)' : ''}</span>
-                        <span class="text-sm text-green-400">${player.status}</span>
-                    </div>
-                `;
-            });
+        const ROSTER = [
+          { name: "Lord Farquaad", img: "https://i.pinimg.com/736x/35/93/ac/3593acb0b8f9d75704f5a0778c693e73.jpg" },
+          { name: "Marinette", img: "https://i.pinimg.com/736x/b8/74/55/b87455575cd069609007a639c9490293.jpg" },
+          { name: "Adrien", img: "https://i.pinimg.com/1200x/5c/2d/c7/5c2dc740ed2fe906b6afaf1320bf4273.jpg" },
+          { name: "Re Julien", img: "https://i.pinimg.com/736x/1e/17/19/1e17194ef5b383e4202fbb4875cfbd81.jpg" },
+          { name: "Skipper", img: "https://i.pinimg.com/736x/e6/f0/5b/e6f05b20dda962344721db983c882679.jpg" },
+          { name: "Gwen", img: "https://i.pinimg.com/1200x/59/d7/15/59d71578cd5f889ae898bbc83dda29dc.jpg" },
+          { name: "Julia", img: "https://i.pinimg.com/736x/80/c2/83/80c283f82be806cdd40e71d303d09474.jpg" },
+          { name: "Duncan", img: "https://i.pinimg.com/736x/3f/2d/e1/3f2de1cd71448e1413ab3ccafbed5b4d.jpg" },
+          { name: "Conan", img: "https://i.pinimg.com/736x/19/fe/f0/19fef0cf0b848e1f5fe54d9b641af4ce.jpg" },
+          { name: "Ran", img: "https://i.pinimg.com/1200x/46/ee/c7/46eec75f3a3eeb4846216dfdd7083ff4.jpg" },
+          { name: "Rias", img: "https://i.pinimg.com/736x/d1/a7/df/d1a7df7bfe5769c39e9b66041144e4eb.jpg" },
+          { name: "Bayonetta", img: "https://i.pinimg.com/1200x/60/fc/c0/60fcc064dc97d24b96a9517f726c1970.jpg" },
+          { name: "Yoshi", img: "https://i.pinimg.com/736x/f3/05/7f/f3057f14de68b0afe682ffe93dcc479b.jpg" },
+          { name: "Rosalinda", img: "https://i.pinimg.com/736x/09/14/f0/0914f029e712e92de9d4f0081a5da032.jpg" },
+          { name: "Brago", img: "https://i.pinimg.com/736x/c6/75/2d/c6752dab1b78e4c4adc64b6ffd09b755.jpg" },
+          { name: "Ponygon", img: "https://i.pinimg.com/736x/53/e4/fb/53e4fb1c1f8964ca949c4e72663edd8f.jpg" },
+          { name: "Steven", img: "https://i.pinimg.com/736x/2b/fd/20/2bfd202ab782611ea6a0fb0cdcdc37ab.jpg" },
+          { name: "Perla", img: "https://i.pinimg.com/1200x/bf/d3/78/bfd378c4c8921a30ee00cf48bdb7fa11.jpg" },
+          { name: "Ametista", img: "https://i.pinimg.com/736x/b4/e4/45/b4e445061d31ec75fa4ee63e20ebf87e.jpg" },
+          { name: "Nicole", img: "https://i.pinimg.com/736x/81/24/e4/8124e43da43e1d06dcdbca15f22a0cd9.jpg" },
+          { name: "Gumball", img: "https://i.pinimg.com/736x/ae/88/e3/ae88e329120b3edc196af1ebbfd8fe07.jpg" },
+          { name: "Anais", img: "https://i.pinimg.com/736x/0a/8b/ab/0a8bab3e6151e894a2d9b96749d63e61.jpg" },
+          { name: "Lisa", img: "https://i.pinimg.com/736x/e5/2d/fe/e52dfee5a58f5dad19f9e0592c63a7cd.jpg" },
+          { name: "Bart", img: "https://i.pinimg.com/1200x/cf/dc/86/cfdc8641fb98a49c0e731a8e6c002b02.jpg" },
+          { name: "Marge", img: "https://i.pinimg.com/736x/77/6d/41/776d41748c4c9ae5940d8a9b10db881a.jpg" },
+          { name: "Ned", img: "https://i.pinimg.com/1200x/4e/12/0e/4e120eb01e572b2ad08af6552214ce82.jpg" },
+          { name: "Neera", img: "https://i.pinimg.com/736x/49/15/3c/49153c31d0b41814b3c862a98d848b40.jpg" },
+          { name: "Perry", img: "https://i.pinimg.com/736x/3e/02/28/3e02284ed84c86d445b3bee5639c81f6.jpg" },
+          { name: "Nonnina", img: "https://i.pinimg.com/736x/c0/82/61/c08261487f081ba5ed490c5dc317b112.jpg" },
+          { name: "Sid", img: "https://i.pinimg.com/1200x/69/4a/0e/694a0eeaf3c1182a15263d580cd0f7eb.jpg" },
+          { name: "Diego", img: "https://i.pinimg.com/736x/56/bf/be/56bfbecae5aa54c2dd6ee8620fc66361.jpg" },
+          { name: "Alex", img: "https://i.pinimg.com/1200x/2d/c2/4c/2dc24cfae5fe2848bc8bdd1f684d1c8d.jpg" },
+          { name: "Corvina GO", img: "https://i.pinimg.com/736x/92/91/db/9291dbef281abc1f05e709c94fe17eba.jpg" },
+          { name: "Corvina TT", img: "https://i.pinimg.com/736x/b8/09/d1/b809d102bfdc848380a4d73e94fe7769.jpg" },
+          { name: "Stellarubia GO", img: "https://i.pinimg.com/736x/b8/7f/35/b87f358405b6d516a3e6321709aa4884.jpg" },
+          { name: "Robin TT", img: "https://i.pinimg.com/736x/cd/57/18/cd57186e05d47ef5f75bef6f0a33f59c.jpg" },
+          { name: "Nightwing", img: "https://i.pinimg.com/736x/47/bc/ce/47bcceac6b573a1b8277b6a75f0a4b55.jpg" },
+          { name: "Robin GO", img: "https://i.pinimg.com/736x/92/b6/50/92b650adbe57c5cec55a3ef46b65e933.jpg" },
+          { name: "Johnny Bravo", img: "https://i.pinimg.com/736x/4a/62/70/4a6270678f7adcf130672bcd0af41fdf.jpg" },
+          { name: "Daphne", img: "https://i.pinimg.com/736x/aa/91/39/aa9139e32492a07712926dbd0db0b521.jpg" },
+          { name: "Shaggy", img: "https://i.pinimg.com/1200x/0e/46/70/0e46703bcf03ff84420b0b71474c9ed7.jpg" },
+          { name: "Francine", img: "https://i.pinimg.com/736x/b3/b5/f6/b3b5f6849a52b4daed92424650a98f7f.jpg" },
+          { name: "Hayley", img: "https://i.pinimg.com/originals/9d/58/70/9d58707a635942c60ee7fd1afc8403bd.gif" },
+          { name: "Stan", img: "https://i.pinimg.com/736x/cc/48/c0/cc48c09c661d4f9af432a37c6b908e41.jpg" },
+          { name: "Stewie", img: "https://i.pinimg.com/1200x/1e/a2/cc/1ea2cc7a197e3841086f4a1ce18b089c.jpg" },
+          { name: "Lois", img: "https://i.pinimg.com/736x/6e/f7/42/6ef74238d3938c8e02f62c54fa7fb4c5.jpg" },
+          { name: "Peter", img: "https://i.pinimg.com/736x/9e/40/74/9e4074bbe7890cd245b51b9ff5c0e33c.jpg" },
+          { name: "Fry", img: "https://i.pinimg.com/736x/d6/f4/ac/d6f4acc1bfae65c673b4b5e02a89ce71.jpg" },
+          { name: "Leela", img: "https://i.pinimg.com/736x/e9/b2/71/e9b27128376e5b5f23aaafdc9956bd50.jpg" },
+          { name: "Kim", img: "https://i.pinimg.com/736x/5d/7d/55/5d7d55fec8f9d8fb81e9db4438235f71.jpg" },
+          { name: "Shego", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
+          { name: "Ben 10", img: "https://i.pinimg.com/736x/b3/c8/eb/b3c8ebedc4123fa33f6e72ff2deff109.jpg" },
+          { name: "Gwen Tennyson", img: "https://i.pinimg.com/736x/f7/59/57/f75957bd5bad8195e2322e58de3f8119.jpg" }
+        ];
 
-            // Renderizza le impostazioni
-            const settingsDiv = document.getElementById('lobby-settings');
-            settingsDiv.innerHTML = `
-                <h3 class="text-xl font-semibold mb-2">Impostazioni:</h3>
-                <p>Modalità: <span class="font-bold">${roomData.mode === '1v1' ? '1 vs 1' : 'FFA (4 Giocatori)'}</span></p>
-                <p>CPU: <span class="font-bold">${roomData.settings.cpu ? 'Sì' : 'No'}</span></p>
-                <p>Carte Totali Deck: <span class="font-bold">${roomData.settings.deckLimit}</span></p>
-                <p>Carte in Campo: <span class="font-bold">${roomData.settings.fieldLimit}</span></p>
-            `;
-        };
+        const TEAM_NAMES = [
+          "Marmotte Urlanti", "Carpe Assassine", "Criceti Radioattivi", "Avvoltoi Volanti",
+          "Tigri Selvaggi", "Orsi Polari", "Lupi Mannari", "Serpenti A Sonagli"
+        ];
 
-        const listenToGameSession = (roomId) => {
-            if (gameSessionListener) gameSessionListener(); // Ferma il listener precedente
+        const App = () => {
+          const [user, setUser] = useState(null);
+          const [nickname, setNickname] = useState('');
+          const [currentView, setCurrentView] = useState('auth');
+          const [lobbies, setLobbies] = useState([]);
+          const [currentLobbyId, setCurrentLobbyId] = useState(null);
+          const [lobbyData, setLobbyData] = useState(null);
+          const [errorMsg, setErrorMsg] = useState('');
 
-            const roomRef = doc(db, `artifacts/${appId}/public/data`, 'gameSessions', roomId);
-            gameSessionListener = onSnapshot(roomRef, (docSnap) => {
-                if (!docSnap.exists()) {
-                    console.log("Sessione di gioco terminata o cancellata.");
-                    leaveGameSession(); // Torna al menu se la stanza è stata cancellata
-                    return;
-                }
+          // AUTH SETUP
+          useEffect(() => {
+            const initAuth = async () => {
+              if (!auth) return;
+              try {
+                 await signInAnonymously(auth);
+              } catch (e) {
+                 console.error("Errore Autenticazione:", e);
+              }
+            };
+            
+            initAuth();
+            
+            if (auth) {
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }
+          }, []);
 
-                const roomData = { id: docSnap.id, ...docSnap.data() };
-                currentRoomId = roomData.id;
-
-                if (roomData.status === 'waiting') {
-                    showScreen('lobby');
-                    renderLobby(roomData);
-                } else if (roomData.status === 'playing' || roomData.status === 'select_replacement') {
-                    showScreen('game-screen');
-                    renderGame(roomData);
-                } else if (roomData.status === 'finished') {
-                    showScreen('game-screen');
-                    renderGame(roomData); // Renderizza lo stato finale del campo
-                    handleGameEnd(roomData);
-                }
+          // FETCH LOBBIES
+          useEffect(() => {
+            if (!user || !db) return;
+            const q = collection(db, 'artifacts', appId, 'public', 'data', 'lobbies');
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+              const activeLobbies = snapshot.docs
+                .map(d => ({ id: d.id, ...d.data() }))
+                .filter(l => l.status === 'waiting' && l.timestamp);
+              activeLobbies.sort((a, b) => b.timestamp - a.timestamp);
+              setLobbies(activeLobbies);
             }, (error) => {
-                console.error("Errore onSnapshot sessione di gioco:", error);
-                // Non usare alert(), usa un messaggio su schermo o console
-                leaveGameSession();
+                console.error("Errore fetch lobbies:", error);
+                setErrorMsg("Errore di connessione al database. Controlla le regole Firestore.");
             });
-        };
+            return () => unsubscribe();
+          }, [user]);
 
-        // --- Logica di Gioco in Partita ---
-        let selectedActiveCardId = null;
-        let selectedMove = null;
-        let selectedTargetPlayerId = null;
-        let selectedTargetCardIndex = null;
-        let currentGameState = null;
+          // SYNC LOBBY
+          useEffect(() => {
+            if (!user || !currentLobbyId || !db) return;
+            const unsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', currentLobbyId), (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                setLobbyData(data);
+                if (data.status === 'playing') setCurrentView('game');
+              } else {
+                setLobbyData(null);
+                setCurrentLobbyId(null);
+                setCurrentView('browser');
+              }
+            });
+            return () => unsub();
+          }, [currentLobbyId, user]);
 
-        document.getElementById('start-game-btn').addEventListener('click', startGame);
-
-        async function startGame() {
-            const roomRef = doc(db, `artifacts/${appId}/public/data`, 'gameSessions', currentRoomId);
-            const roomSnap = await getDoc(roomRef);
-            const room = { id: roomSnap.id, ...roomSnap.data() };
-
-            const players = room.players;
-            const playerIds = Object.keys(players);
-
-            // Aggiungi CPU se necessario
-            let cpuCount = 0;
-            const maxPlayers = room.mode === '1v1' ? 2 : 4;
-            if (room.settings.cpu) {
-                cpuCount = maxPlayers - playerIds.length;
-                for (let i = 1; i <= cpuCount; i++) {
-                    const cpuId = `cpu_${Date.now()}_${i}`;
-                    const cpuName = `CPU ${i}`;
-                    players[cpuId] = {
-                        name: cpuName,
-                        isHost: false,
-                        status: 'ready',
-                        isCPU: true,
-                        deck: generateRandomDeck().slice(0, room.settings.deckLimit) // Deck della CPU
-                    };
-                }
-            }
-
-            const initialField = {};
-            const initialDeck = {};
-            const playerOrder = Object.keys(players).sort(() => 0.5 - Math.random()); // Ordine casuale
-
-            for (const pId in players) {
-                const p = players[pId];
-                const deckIds = p.deck.slice(); // Copia del deck (ID delle carte)
-                const fieldCards = [];
-
-                // Manda le prime X carte in campo
-                for (let i = 0; i < room.settings.fieldLimit && deckIds.length > 0; i++) {
-                    const cardId = deckIds.shift();
-                    fieldCards.push(createCardInstance(cardId, pId));
-                }
-
-                initialField[pId] = fieldCards;
-                initialDeck[pId] = deckIds;
-            }
-
-            const gameState = {
-                status: 'playing',
-                currentPlayerIndex: 0,
-                playerOrder: playerOrder,
-                playerData: Object.keys(players).reduce((acc, pId) => {
-                    acc[pId] = {
-                        name: players[pId].name,
-                        isCPU: !!players[pId].isCPU,
-                        status: 'alive',
-                        deck: initialDeck[pId], // ID carte rimanenti
-                        field: initialField[pId], // Istanze di carta sul campo
-                        fieldLimit: room.settings.fieldLimit,
-                        defeatedCount: 0
-                    };
-                    return acc;
-                }, {}),
-                turn: 1,
-                log: [`Inizio Partita: ${room.mode} (${Object.keys(players).length} Giocatori)`]
+          const createLobby = async (config) => {
+            if (!user || !db) return;
+            const code = Math.floor(1000 + Math.random() * 9000).toString();
+            const newLobbyRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'lobbies'));
+            
+            const initialData = {
+              hostId: user.uid,
+              hostName: nickname,
+              code: code,
+              status: 'waiting',
+              config: config, 
+              currentSeasonIndex: 0,
+              seasonWinners: [],
+              rankings: [], 
+              players: [{
+                uid: user.uid,
+                name: nickname,
+                character: null,
+                isBot: false,
+                status: 'active',
+                team: null,
+                relationships: {},
+                alliances: [],
+                diceRoll: null
+              }],
+              round: 0,
+              phase: 'setup',
+              logs: [`Lobby creata da ${nickname}. Codice: ${code}`],
+              chat: [], 
+              votes: {},
+              immunity: [],
+              losingTeam: null,
+              ceremonyData: null,
+              challengeData: null, 
+              finalData: null, 
+              timestamp: serverTimestamp()
             };
 
-            await updateDoc(roomRef, { gameState: gameState, status: 'playing', players: players });
-        }
+            await setDoc(newLobbyRef, initialData);
+            setCurrentLobbyId(newLobbyRef.id);
+            setCurrentView('lobby');
+          };
 
-        const createCardInstance = (cardId, playerId) => {
-            const def = __CARD_DEFINITIONS[cardId];
-            if (!def) return null;
-            return {
-                id: cardId, // ID dalla definizione
-                uniqueId: `${playerId}-${cardId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, // ID univoco più robusto
-                name: def.name,
-                ownerId: playerId,
-                hp: def.maxHp,
-                maxHp: def.maxHp,
-                attack: def.attack,
-                defense: def.defense,
-                ability: def.ability,
-                statusEffects: [], // e.g., { type: 'stun', turnsLeft: 1 }
-                moves: def.moves
-            };
+          const joinLobby = async (lobbyId) => {
+            if (!user || !db) return;
+            const lobbyRef = doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId);
+            const snap = await getDoc(lobbyRef);
+            if (!snap.exists()) return;
+            const data = snap.data();
+            
+            if (data.players.length >= data.config.maxPlayers) return setErrorMsg("Lobby piena.");
+
+            await updateDoc(lobbyRef, {
+              players: arrayUnion({
+                uid: user.uid,
+                name: nickname,
+                character: null,
+                isBot: false,
+                status: 'active',
+                team: null,
+                relationships: {},
+                alliances: [],
+                diceRoll: null
+              })
+            });
+            setCurrentLobbyId(lobbyId);
+            setCurrentView('lobby');
+          };
+
+          if (!app) {
+              return (
+                  <div className="flex items-center justify-center h-screen bg-slate-900 text-white p-8 text-center">
+                      <div>
+                          <h1 className="text-3xl font-bold text-red-500 mb-4">Caricamento Firebase...</h1>
+                      </div>
+                  </div>
+              );
+          }
+
+          return (
+            <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+              {currentView === 'auth' && (
+                <AuthScreen nickname={nickname} setNickname={setNickname} onEnter={() => setCurrentView('browser')} />
+              )}
+              {currentView === 'browser' && (
+                <BrowserScreen 
+                  user={user} nickname={nickname} lobbies={lobbies} 
+                  onCreate={createLobby} onJoin={joinLobby} errorMsg={errorMsg}
+                />
+              )}
+              {currentView === 'lobby' && lobbyData && (
+                <LobbyRoom 
+                  lobby={lobbyData} user={user} lobbyId={currentLobbyId} 
+                  onLeave={() => { setCurrentLobbyId(null); setCurrentView('browser'); }} 
+                />
+              )}
+              {currentView === 'game' && lobbyData && (
+                <GameRoom 
+                  lobby={lobbyData} user={user} lobbyId={currentLobbyId} 
+                  onLeave={() => { setCurrentLobbyId(null); setCurrentView('browser'); }}
+                />
+              )}
+            </div>
+          );
         };
 
-        const renderGame = (roomData) => {
-            currentGameState = roomData.gameState;
-            if (!currentGameState) return;
+        // --- SCREENS ---
 
-            const myPlayerId = userId;
-            const myData = currentGameState.playerData[myPlayerId];
-            const currentPlayerId = currentGameState.playerOrder[currentGameState.currentPlayerIndex];
-            const currentPlayer = currentGameState.playerData[currentPlayerId];
-            const isMyTurn = currentPlayerId === myPlayerId;
-            const isMyTurnForReplacement = roomData.status === 'select_replacement' && currentGameState.replacementNeededForPlayer === myPlayerId;
+        const AuthScreen = ({ nickname, setNickname, onEnter }) => (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-[url('https://i.pinimg.com/originals/2b/96/96/2b969635546059637841555541578508.jpg')] bg-cover bg-center">
+            <div className="bg-slate-900/90 p-8 rounded-2xl shadow-2xl backdrop-blur-sm max-w-md w-full text-center border-2 border-yellow-500">
+              <h1 className="text-5xl font-black text-yellow-400 mb-2 drop-shadow-lg" style={{ WebkitTextStroke: '2px black' }}>TOTAL DRAMA</h1>
+              <h2 className="text-2xl font-bold text-white mb-6 uppercase tracking-widest">Online Survivor</h2>
+              <input
+                type="text"
+                placeholder="Il tuo Nickname"
+                className="w-full bg-slate-800 border-2 border-slate-600 rounded-xl p-4 text-white text-center text-xl font-bold mb-4 focus:border-yellow-500 outline-none"
+                value={nickname}
+                onChange={e => setNickname(e.target.value)}
+                maxLength={15}
+              />
+              <button
+                onClick={onEnter}
+                disabled={nickname.length < 2}
+                className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black py-4 rounded-xl text-xl uppercase transition shadow-lg disabled:opacity-50 transform hover:scale-105"
+              >
+                Entra nel Reality
+              </button>
+            </div>
+          </div>
+        );
 
-            document.getElementById('game-mode-display').textContent = roomData.mode;
-            document.getElementById('current-player-name').textContent = currentPlayer.name;
-            document.getElementById('deck-left-count').textContent = myData ? myData.deck.length : 0;
-            document.getElementById('game-message').classList.add('hidden');
+        const BrowserScreen = ({ user, nickname, lobbies, onCreate, onJoin, errorMsg }) => {
+          const [showConfig, setShowConfig] = useState(false);
+          // Default mergeSize a 11 (metà di 22)
+          const [config, setConfig] = useState({ maxPlayers: 22, numTeams: 2, numSeasons: 1, mergeSize: 11 });
+          const [joinCode, setJoinCode] = useState('');
 
-            // Render Log
-            const logEl = document.getElementById('move-log');
-            logEl.innerHTML = currentGameState.log.map(msg => `<p class="mb-1 border-b border-gray-800 pb-1">${msg}</p>`).reverse().join('');
+          return (
+            <div className="max-w-4xl mx-auto p-4 py-8">
+              {!showConfig ? (
+                <>
+                  <div className="flex justify-between items-center mb-8 bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                     <div>
+                        <h2 className="text-3xl font-black text-yellow-400">LOBBY BROWSER</h2>
+                        <p className="text-slate-400">Giocatore: <span className="text-white font-bold">{nickname}</span></p>
+                     </div>
+                     <button onClick={() => setShowConfig(true)} className="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg transition transform hover:scale-105">
+                       <UserPlus size={20} /> CREA SHOW
+                     </button>
+                  </div>
+
+                  <div className="bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700 mb-8">
+                      <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Play size={20} className="text-purple-400"/> Unisciti con Codice</h3>
+                      <div className="flex gap-2">
+                        <input value={joinCode} onChange={e => setJoinCode(e.target.value)} maxLength={4} placeholder="0000" className="bg-slate-900 rounded-lg px-4 py-2 w-32 text-center text-xl tracking-widest font-mono text-white" />
+                        <button onClick={() => {
+                           const lobby = lobbies.find(l => l.code === joinCode);
+                           if(lobby) onJoin(lobby.id);
+                        }} className="bg-purple-600 px-6 py-2 rounded-lg font-bold hover:bg-purple-500 text-white">VAI</button>
+                      </div>
+                      {errorMsg && <p className="text-red-400 mt-2 font-bold">{errorMsg}</p>}
+                   </div>
+
+                   <div className="grid gap-4">
+                     {lobbies.length === 0 ? (
+                       <div className="text-center py-12 text-slate-500 italic bg-slate-800/50 rounded-xl">Nessuna partita in corso.</div>
+                     ) : (
+                       lobbies.map(l => (
+                         <div key={l.id} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center hover:bg-slate-750 border border-slate-700 transition">
+                           <div>
+                             <span className="font-bold text-lg text-white">{l.hostName}'s Show</span>
+                             <div className="flex gap-2 mt-1">
+                                <span className="text-xs bg-yellow-900 text-yellow-200 px-2 py-0.5 rounded font-mono">Stagioni: {l.config.numSeasons}</span>
+                                <span className="text-xs bg-blue-900 text-blue-200 px-2 py-0.5 rounded font-mono">Max: {l.config.maxPlayers}</span>
+                                <span className="text-xs bg-red-900 text-red-200 px-2 py-0.5 rounded font-mono">Merge: {l.config.mergeSize || Math.floor(l.config.maxPlayers/2)}</span>
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-4">
+                              <span className="text-slate-400 font-mono bg-slate-900 px-2 py-1 rounded">CODE: {l.code}</span>
+                              <button onClick={() => onJoin(l.id)} className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg font-bold text-sm text-white">ENTRA</button>
+                           </div>
+                         </div>
+                       ))
+                     )}
+                   </div>
+                </>
+              ) : (
+                <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl border-2 border-yellow-500 max-w-lg mx-auto">
+                  <h2 className="text-3xl font-black text-center mb-6 text-white">CONFIGURA SHOW</h2>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-slate-400 font-bold mb-2">Concorrenti (8 - 53)</label>
+                      <div className="flex items-center gap-4">
+                        <input type="range" min="8" max="53" value={config.maxPlayers} onChange={e => {
+                            const newVal = parseInt(e.target.value);
+                            setConfig({
+                                ...config, 
+                                maxPlayers: newVal,
+                                mergeSize: Math.min(config.mergeSize, newVal - 1)
+                            });
+                        }} className="flex-1 accent-yellow-500" />
+                        <span className="text-2xl font-bold w-12 text-center">{config.maxPlayers}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-bold mb-2">Squadre (2 - 8)</label>
+                      <div className="flex items-center gap-4">
+                        <input type="range" min="2" max="8" value={config.numTeams} onChange={e => setConfig({...config, numTeams: parseInt(e.target.value)})} className="flex-1 accent-blue-500" />
+                        <span className="text-2xl font-bold w-12 text-center">{config.numTeams}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-bold mb-2">Merge quando rimangono:</label>
+                      <div className="flex items-center gap-4">
+                        <input 
+                            type="range" 
+                            min="3" 
+                            max={Math.max(3, config.maxPlayers - 2)} 
+                            value={config.mergeSize} 
+                            onChange={e => setConfig({...config, mergeSize: parseInt(e.target.value)})} 
+                            className="flex-1 accent-red-500" 
+                        />
+                        <span className="text-2xl font-bold w-12 text-center">{config.mergeSize}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-bold mb-2">Stagioni (1 - 3)</label>
+                      <div className="flex gap-2">
+                        {[1, 2, 3].map(n => (
+                          <button 
+                            key={n} 
+                            onClick={() => setConfig({...config, numSeasons: n})}
+                            className={`flex-1 py-3 rounded-xl font-bold border-2 ${config.numSeasons === n ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-slate-900 border-slate-700 text-slate-400'}`}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 pt-4">
+                      <button onClick={() => setShowConfig(false)} className="flex-1 bg-slate-700 py-3 rounded-xl font-bold text-white">Annulla</button>
+                      <button onClick={() => onCreate(config)} className="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded-xl font-bold text-white shadow-lg">CREA LOBBY</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        const LobbyRoom = ({ lobby, user, lobbyId, onLeave }) => {
+          const isHost = lobby.hostId === user.uid;
+
+          const selectCharacter = async (char) => {
+            if (lobby.players.some(p => p.character?.name === char.name)) return;
+            const updatedPlayers = lobby.players.map(p => p.uid === user.uid ? { ...p, character: char } : p);
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), { players: updatedPlayers });
+          };
+
+          const startSeason = async () => {
+            let currentPlayers = [...lobby.players];
+            const usedNames = new Set(currentPlayers.map(p => p.character?.name).filter(Boolean));
             
-            // --- RENDER TAVOLO ---
-            const table = document.getElementById('battle-table');
-            // Pulisci il tavolo mantenendo il placeholder VS
-            table.innerHTML = '<div class="absolute inset-0 flex items-center justify-center pointer-events-none"><span class="text-white opacity-20 text-6xl font-bold">VS</span></div>';
+            currentPlayers = currentPlayers.map(p => {
+              if (!p.character) {
+                const available = ROSTER.filter(r => !usedNames.has(r.name));
+                const random = available[Math.floor(Math.random() * available.length)];
+                usedNames.add(random.name);
+                return { ...p, character: random };
+              }
+              return p;
+            });
 
-            // 1. RENDER PLAYER (TU) - BOTTOM
-            const myZone = document.createElement('div');
-            myZone.className = 'player-zone zone-bottom';
-            renderZoneContent(myZone, myData, myPlayerId, true, isMyTurn); // isMe = true
-            table.appendChild(myZone);
+            while (currentPlayers.length < lobby.config.maxPlayers) {
+              const available = ROSTER.filter(r => !usedNames.has(r.name));
+              if (available.length === 0) break;
+              const randomChar = available[Math.floor(Math.random() * available.length)];
+              usedNames.add(randomChar.name);
+              
+              const botId = `bot_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+              currentPlayers.push({
+                uid: botId,
+                name: randomChar.name,
+                character: randomChar,
+                isBot: true,
+                status: 'active',
+                team: null,
+                relationships: {},
+                alliances: [],
+                diceRoll: null
+              });
+            }
 
-            // 2. RENDER OPPONENTS
-            const opponents = Object.keys(currentGameState.playerData).filter(id => id !== myPlayerId);
+            const numTeams = lobby.config.numTeams;
+            for (let i = currentPlayers.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [currentPlayers[i], currentPlayers[j]] = [currentPlayers[j], currentPlayers[i]];
+            }
+            currentPlayers = currentPlayers.map((p, idx) => ({
+              ...p,
+              team: TEAM_NAMES[idx % numTeams]
+            }));
+
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+              players: currentPlayers,
+              status: 'playing',
+              phase: 'episode_start',
+              round: 1,
+              logs: arrayUnion(`--- INIZIO STAGIONE 1: L'ISOLA ---`)
+            });
+          };
+
+          return (
+            <div className="flex flex-col h-screen overflow-hidden">
+              <header className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center z-10">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Lobby: {lobby.hostName}</h2>
+                  <p className="text-slate-400 text-sm">Codice: {lobby.code} | Max: {lobby.config.maxPlayers} | Teams: {lobby.config.numTeams}</p>
+                </div>
+                <button onClick={onLeave} className="text-red-400 font-bold text-sm">Esci</button>
+              </header>
+
+              <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                <div className="w-full md:w-64 bg-slate-900 p-4 overflow-y-auto border-r border-slate-800">
+                  <h3 className="font-bold text-slate-300 mb-2 uppercase text-xs">Giocatori ({lobby.players.length}/{lobby.config.maxPlayers})</h3>
+                  <div className="space-y-2">
+                    {lobby.players.map(p => (
+                      <div key={p.uid} className="bg-slate-800 p-2 rounded flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-slate-700 overflow-hidden flex-shrink-0">
+                           {p.character ? <img src={p.character.img} className="w-full h-full object-cover" /> : <div className="animate-pulse bg-slate-600 w-full h-full"/>}
+                        </div>
+                        <div className="truncate text-sm font-bold">{p.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {isHost && (
+                    <button onClick={startSeason} className="w-full mt-4 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold shadow-lg">
+                      INIZIA STAGIONE 1
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex-1 p-4 overflow-y-auto bg-slate-900">
+                   <h3 className="text-xl font-bold mb-4 text-center text-yellow-400">SCEGLI IL TUO PERSONAGGIO</h3>
+                   <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                     {ROSTER.map(char => {
+                       const takenBy = lobby.players.find(p => p.character?.name === char.name);
+                       const isMe = takenBy?.uid === user.uid;
+                       return (
+                         <button 
+                           key={char.name}
+                           onClick={() => selectCharacter(char)}
+                           disabled={!!takenBy}
+                           className={`relative rounded-lg overflow-hidden border-2 aspect-[3/4] transition ${isMe ? 'border-green-500 ring-2 ring-green-500' : takenBy ? 'border-red-900 opacity-40' : 'border-slate-700 hover:border-yellow-500'}`}
+                         >
+                           <img src={char.img} alt={char.name} className="w-full h-full object-cover" />
+                           {isMe && <div className="absolute inset-0 border-4 border-green-500"></div>}
+                         </button>
+                       )
+                     })}
+                   </div>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        // --- GAME LOGIC ---
+
+        const GameRoom = ({ lobby, user, lobbyId, onLeave }) => {
+          const isHost = lobby.hostId === user.uid;
+          const myPlayer = lobby.players.find(p => p.uid === user.uid);
+          const activePlayers = lobby.players.filter(p => p.status === 'active');
+          const currentSeason = SEASON_CONFIG[lobby.currentSeasonIndex] || SEASON_CONFIG[0];
+          const isMerge = activePlayers.length <= (lobby.config.mergeSize || (lobby.config.maxPlayers / 2)); 
+
+          const [hasActed, setHasActed] = useState(false);
+          const [chatInput, setChatInput] = useState("");
+          const chatRef = useRef(null);
+          
+          const [nextSeasonConfig, setNextSeasonConfig] = useState(null); 
+
+          const [selectedPlayer, setSelectedPlayer] = useState(null);
+
+          useEffect(() => {
+            setHasActed(false);
+            setSelectedPlayer(null);
+          }, [lobby.phase, lobby.round]);
+
+          useEffect(() => {
+            if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+          }, [lobby.chat]);
+
+          // SEQUENTIAL DICE ANIMATION (HOST FOR BOTS ONLY)
+          useEffect(() => {
+            if (!isHost || lobby.phase !== 'challenge' || !lobby.challengeData || lobby.challengeData.stage !== 'rolling') return;
+
+            const { rollingIndex, players: rollPlayers, rolls } = lobby.challengeData;
+            if (rollingIndex >= rollPlayers.length) {
+                 let maxRoll = -1;
+                 let winners = [];
+                 Object.entries(rolls).forEach(([uid, r]) => {
+                     if (r > maxRoll) { maxRoll = r; winners = [uid]; }
+                     else if (r === maxRoll) { winners.push(uid); }
+                 });
+                 
+                 updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                     [`challengeData.stage`]: 'finished',
+                     [`challengeData.winner`]: winners,
+                     immunity: winners,
+                     losingTeam: "MERGE",
+                     phase: 'social'
+                 });
+                 return;
+            }
+
+            const currentPlayerId = rollPlayers[rollingIndex];
+            const playerObj = lobby.players.find(p => p.uid === currentPlayerId);
+
+            if (playerObj?.isBot) {
+                const timer = setTimeout(async () => {
+                    const roll = Math.floor(Math.random() * 10) + 1;
+                    const updatedRolls = { ...rolls, [currentPlayerId]: roll };
+                    
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                        [`challengeData.rolls`]: updatedRolls,
+                        [`challengeData.rollingIndex`]: rollingIndex + 1,
+                        [`players`]: lobby.players.map(p => p.uid === currentPlayerId ? { ...p, diceRoll: roll } : p)
+                    });
+                }, 1500);
+                return () => clearTimeout(timer);
+            }
+          }, [lobby.challengeData, isHost]);
+
+          // --- BOT FINAL SHOWDOWN ROLLING ---
+          useEffect(() => {
+              if (!isHost || lobby.phase !== 'final_showdown' || !lobby.finalData) return;
+              
+              const { currentRolls } = lobby.finalData;
+              const finalists = lobby.players.filter(p => p.status === 'active');
+              
+              finalists.forEach(p => {
+                  if (p.isBot && (!currentRolls || !currentRolls[p.uid])) {
+                       const timer = setTimeout(async () => {
+                           const r = Math.floor(Math.random() * 10) + 1;
+                           const updatedRolls = { ...(currentRolls || {}), [p.uid]: r };
+                           await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                               [`finalData.currentRolls`]: updatedRolls
+                           });
+                       }, 1000 + Math.random() * 1000); 
+                       return () => clearTimeout(timer);
+                  }
+              });
+          }, [lobby.finalData, isHost, lobby.phase]);
+
+
+          const sendChat = async (e) => {
+            e.preventDefault();
+            if (!chatInput.trim()) return;
+            const msg = {
+                sender: myPlayer.name,
+                text: chatInput.trim(),
+                team: myPlayer.team || "Merge",
+                ts: Date.now()
+            };
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                chat: arrayUnion(msg)
+            });
+            setChatInput("");
+          };
+
+          const handleUserRoll = async () => {
+              const roll = Math.floor(Math.random() * 10) + 1;
+              const { rollingIndex, rolls } = lobby.challengeData;
+              const updatedRolls = { ...rolls, [user.uid]: roll };
+              
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                  [`challengeData.rolls`]: updatedRolls,
+                  [`challengeData.rollingIndex`]: rollingIndex + 1,
+                  [`players`]: lobby.players.map(p => p.uid === user.uid ? { ...p, diceRoll: roll } : p)
+              });
+          };
+
+          const handleTieBreakRoll = async () => {
+              const roll = Math.floor(Math.random() * 10) + 1;
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                  [`ceremonyData.tieMatch.rolls.${user.uid}`]: roll
+              });
+          };
+
+          const handleFinalRoll = async () => {
+              if (lobby.phase !== 'final_showdown') return;
+              const roll = Math.floor(Math.random() * 10) + 1;
+              const currentRolls = lobby.finalData.currentRolls || {};
+              
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                  [`finalData.currentRolls.${user.uid}`]: roll
+              });
+          };
+
+
+          const startNextSeason = async (newConfig) => {
+            if (!isHost) return;
             
-            if (roomData.mode === '1v1' && opponents.length > 0) {
-                // Opponent TOP
-                const oppId = opponents[0];
-                const oppZone = document.createElement('div');
-                oppZone.className = 'player-zone zone-top';
-                renderZoneContent(oppZone, currentGameState.playerData[oppId], oppId, false, false);
-                table.appendChild(oppZone);
+            const nextIndex = lobby.currentSeasonIndex + 1;
+            const allParticipants = lobby.players; 
+            
+            let availablePlayers = [...allParticipants];
+            
+            availablePlayers.sort(() => Math.random() - 0.5);
+
+            const returningPlayers = availablePlayers.slice(0, newConfig.returningCount);
+            
+            let nextPlayers = returningPlayers.map(p => ({
+                uid: p.uid,
+                name: p.name,
+                character: p.character, 
+                isBot: p.isBot,
+                status: 'active', 
+                team: null, 
+                relationships: {}, 
+                alliances: [], 
+                diceRoll: null
+            }));
+
+            const numTeams = newConfig.numTeams;
+            nextPlayers.sort(() => Math.random() - 0.5);
+            nextPlayers = nextPlayers.map((p, idx) => ({
+              ...p,
+              team: TEAM_NAMES[idx % numTeams]
+            }));
+
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+               currentSeasonIndex: nextIndex,
+               players: nextPlayers,
+               phase: 'episode_start',
+               round: 1,
+               config: {
+                   ...lobby.config,
+                   maxPlayers: newConfig.returningCount, 
+                   numTeams: newConfig.numTeams,
+                   mergeSize: newConfig.mergeSize
+               },
+               logs: arrayUnion(`--- INIZIO STAGIONE ${nextIndex + 1}: ${SEASON_CONFIG[nextIndex].name} ---`)
+            });
+
+            setNextSeasonConfig(null); 
+          };
+
+
+          const advanceGame = async () => {
+            if (!isHost) return;
+
+            let updates = {};
+            let newLogs = [];
+
+            if (lobby.phase === 'episode_start') {
+              const mergeSize = lobby.config.mergeSize || (lobby.config.maxPlayers / 2);
+              
+              if (activePlayers.length <= 2) {
+                  updates = { 
+                      phase: 'final_showdown', 
+                      finalData: { p1Score: 0, p2Score: 0, round: 1, history: [], currentRolls: {} },
+                      logs: arrayUnion(`--- GRAN FINALE! ---`) 
+                  };
+              } else {
+                  updates = { phase: 'challenge', logs: arrayUnion(`--- SFIDA EPISODIO ${lobby.round} ---`) };
+                  
+                  if (isMerge) {
+                      const rollers = activePlayers.map(p => p.uid);
+                      updates.challengeData = {
+                          players: rollers,
+                          rollingIndex: 0,
+                          rolls: {},
+                          stage: 'rolling',
+                          winner: null
+                      };
+                  }
+              }
+            }
+            
+            else if (lobby.phase === 'challenge') {
+              if (!isMerge) {
+                 const teams = [...new Set(activePlayers.map(p => p.team))];
+                 const winningTeam = teams[Math.floor(Math.random() * teams.length)];
+                 const losingTeams = teams.filter(t => t !== winningTeam);
+                 const losingTeam = losingTeams[0]; 
+
+                 const immuneIds = lobby.players.filter(p => p.team === winningTeam && p.status === 'active').map(p => p.uid);
+                 
+                 newLogs.push(`IL TEAM ${winningTeam} VINCE!`);
+                 newLogs.push(`Il team ${losingTeam} DEVE VOTARE.`);
+
+                 updates = {
+                    immunity: immuneIds,
+                    losingTeam: losingTeam,
+                    phase: 'social',
+                    logs: arrayUnion(...newLogs)
+                 };
+              }
+            }
+
+            else if (lobby.phase === 'social') {
+                updates = {
+                    phase: 'voting',
+                    votes: {},
+                    logs: arrayUnion("È TEMPO DI VOTARE!")
+                };
+                const botVotes = calculateBotVotes(lobby, isMerge);
+                updates.votes = botVotes;
+            }
+
+            else if (lobby.phase === 'voting') {
+                const { safe, bottomTwo, eliminated, voteCounts, tie } = calculateCeremonyResults(lobby, lobby.votes, isMerge);
+                
+                updates = { 
+                    phase: 'ceremony', 
+                    ceremonyData: { 
+                        safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
+                        tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
+                    },
+                    logs: arrayUnion("--- CERIMONIA DI ELIMINAZIONE ---")
+                };
+            }
+
+            else if (lobby.phase === 'ceremony') {
+              const data = lobby.ceremonyData;
+              
+              if (data.tieMatch) {
+                  const { candidates, rolls } = data.tieMatch;
+                  const allRolled = (candidates || []).every(uid => rolls[uid]);
+                  if (allRolled) {
+                     let minRoll = 11;
+                     let losers = [];
+                     (candidates || []).forEach(uid => {
+                         if (rolls[uid] < minRoll) { minRoll = rolls[uid]; losers = [uid]; }
+                         else if (rolls[uid] === minRoll) { losers.push(uid); }
+                     });
+
+                     if (losers.length === 1) {
+                         const elimId = losers[0];
+                         const safe = data.safe.concat((candidates || []).filter(c => c !== elimId));
+                         
+                         updates = {
+                             [`ceremonyData.eliminated`]: elimId,
+                             [`ceremonyData.tieMatch`]: null,
+                             [`ceremonyData.safe`]: safe,
+                             [`ceremonyData.revealedCount`]: data.revealedCount 
+                         };
+                     } else {
+                         newLogs.push("ANCORA PAREGGIO! Si rilancia.");
+                         updates = {
+                             [`ceremonyData.tieMatch.rolls`]: {},
+                             logs: arrayUnion(...newLogs)
+                         };
+                     }
+                  } else {
+                      (candidates || []).forEach(uid => {
+                          if (!rolls[uid]) {
+                              const p = lobby.players.find(x => x.uid === uid);
+                              if (p && p.isBot) {
+                                  const r = Math.floor(Math.random() * 10) + 1;
+                                  updates[`ceremonyData.tieMatch.rolls.${uid}`] = r;
+                              }
+                          }
+                      });
+                  }
+              } 
+              else if (data.revealedCount < data.safe.length) {
+                 updates = { [`ceremonyData.revealedCount`]: data.revealedCount + 1 };
+              } 
+              else if (!data.finalReveal) {
+                  updates = { [`ceremonyData.finalReveal`]: true };
+              } 
+              else {
+                  const victim = lobby.players.find(p => p.uid === data.eliminated);
+                  const updatedPlayers = lobby.players.map(p => p.uid === data.eliminated ? { ...p, status: 'eliminated' } : p);
+                  
+                  updates = {
+                    players: updatedPlayers,
+                    rankings: arrayUnion({ name: victim.name, team: victim.team || "Merge", round: lobby.round, season: currentSeason.name }),
+                    phase: 'episode_start',
+                    round: lobby.round + 1,
+                    votes: {},
+                    immunity: [],
+                    diceRoll: null,
+                    losingTeam: null,
+                    ceremonyData: null,
+                    challengeData: null,
+                    logs: arrayUnion(`${victim.name} è stato eliminato!`)
+                  };
+              }
+            }
+            else if (lobby.phase === 'game_over') {
+            }
+
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
+          };
+
+          const resolveFinalRound = async () => {
+              if (!isHost || lobby.phase !== 'final_showdown') return;
+              
+              const p1 = activePlayers[0];
+              const p2 = activePlayers[1];
+              const { currentRolls } = lobby.finalData;
+              
+              if (!currentRolls || !currentRolls[p1.uid] || !currentRolls[p2.uid]) return; 
+
+              const r1 = currentRolls[p1.uid];
+              const r2 = currentRolls[p2.uid];
+              
+              let fd = { ...lobby.finalData };
+              let winner = null;
+              let log = "";
+
+              if (r1 > r2) {
+                  fd.p1Score += 1;
+                  log = `${p1.name} vince il round ${fd.round} (${r1} vs ${r2})`;
+              } else if (r2 > r1) {
+                  fd.p2Score += 1;
+                  log = `${p2.name} vince il round ${fd.round} (${r2} vs ${r1})`;
+              } else {
+                  log = `Pareggio al round ${fd.round} (${r1} vs ${r1})`;
+              }
+              
+              fd.history.push({ r1, r2, win: r1 > r2 ? p1.name : r2 > r1 ? p2.name : 'Draw' });
+              fd.round += 1;
+              fd.currentRolls = {}; 
+
+              let updates = { finalData: fd, logs: arrayUnion(log) };
+
+              if (fd.p1Score >= 3 || fd.p2Score >= 3) {
+                  winner = fd.p1Score >= 3 ? p1 : p2;
+                  
+                  const loser = fd.p1Score >= 3 ? p2 : p1;
+                  updates.rankings = arrayUnion({ name: loser.name, team: "FINALIST", round: "FINALE", season: currentSeason.name });
+                  
+                  if (lobby.currentSeasonIndex < lobby.config.numSeasons - 1) {
+                     updates.phase = 'season_setup'; 
+                     updates.seasonWinners = arrayUnion(winner.name);
+                     updates.logs = arrayUnion(`${winner.name} VINCE LA STAGIONE! Preparazione Stagione Successiva.`);
+                     
+                     const maxReturning = lobby.players.length;
+                     setNextSeasonConfig({
+                        returningCount: Math.min(maxReturning, 16), 
+                        numTeams: lobby.config.numTeams,
+                        mergeSize: lobby.config.mergeSize || Math.floor(lobby.config.maxPlayers / 2)
+                     });
+
+                  } else {
+                     updates.phase = 'game_over';
+                     updates.seasonWinners = arrayUnion(winner.name);
+                     updates.rankings = arrayUnion({ name: winner.name, team: "WINNER", round: "WINNER", season: currentSeason.name }); 
+                     updates.logs = arrayUnion(`GIOCO FINITO!`);
+                  }
+              }
+
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
+          };
+
+          const calculateBotVotes = (lobbyState, isMerge) => {
+            const votes = {};
+            const activeBots = lobbyState.players.filter(p => {
+                if (!p.isBot || p.status !== 'active') return false;
+                if (isMerge) return true;
+                return p.team === lobbyState.losingTeam;
+            });
+
+            let candidates = [];
+            
+            if (isMerge) {
+                candidates = lobbyState.players.filter(p => p.status === 'active' && !(lobbyState.immunity || []).includes(p.uid));
             } else {
-                // Logic per FFA: Top, Left, Right
-                const positions = ['zone-top', 'zone-left', 'zone-right'];
-                opponents.forEach((oppId, index) => {
-                    if (index < positions.length) {
-                        const oppZone = document.createElement('div');
-                        oppZone.className = `player-zone ${positions[index]}`;
-                        renderZoneContent(oppZone, currentGameState.playerData[oppId], oppId, false, false);
-                        table.appendChild(oppZone);
-                    }
-                });
+                candidates = lobbyState.players.filter(p => p.status === 'active' && p.team === lobbyState.losingTeam && !(lobbyState.immunity || []).includes(p.uid));
             }
 
-            // Gestione Area Azioni (Rimasta sotto il tavolo)
-            document.getElementById('select-replacement').classList.add('hidden');
-            document.getElementById('select-move-target').classList.add('hidden');
+            activeBots.forEach(bot => {
+                let targets = candidates.filter(t => t.uid !== bot.uid);
+                if (targets.length === 0) return;
 
-            if (roomData.status === 'select_replacement' && isMyTurnForReplacement) {
-                handleReplacementSelection(myData, currentGameState.replacementNeededUniqueId);
-            } else if (roomData.status === 'playing' && isMyTurn) {
-                handleMoveSelection(myData);
-            } else if (roomData.status === 'playing' && !isMyTurn) {
-                 document.getElementById('game-message').textContent = `Attendi il turno di ${currentPlayer.name}...`;
-                 document.getElementById('game-message').classList.remove('hidden');
-            }
+                targets.sort(() => Math.random() - 0.5);
 
-            // --- CPU LOGIC FIX ---
-            // Se il giocatore corrente è una CPU, e IO sono l'host, eseguo la mossa per lui.
-            if (roomData.hostId === userId && currentPlayer.isCPU && (roomData.status === 'playing' || (roomData.status === 'select_replacement' && currentGameState.replacementNeededForPlayer === currentPlayerId))) {
-                 setTimeout(executeCPUMove, 1500); // 1.5s delay per realismo
-            }
-        };
+                const targetsWithScore = targets.map(t => ({
+                    uid: t.uid,
+                    score: bot.relationships[t.uid] || 0
+                }));
 
-        const renderZoneContent = (container, pData, pId, isMe, isMyTurn) => {
-            if (!pData) return;
-            
-            // Info Nome
-            const nameBadge = document.createElement('div');
-            nameBadge.className = 'absolute -top-4 left-1/2 transform -translate-x-1/2 bg-gray-900 px-3 py-1 rounded-full text-xs font-bold border border-gray-600 z-10 whitespace-nowrap';
-            nameBadge.innerHTML = `${pData.name} <span class="${pData.status === 'alive' ? 'text-green-400' : 'text-red-500'}">(${pData.hp || 'Alive'})</span>`;
-            container.appendChild(nameBadge);
+                const minScore = Math.min(...targetsWithScore.map(t => t.score));
 
-            if (pData.status !== 'alive') {
-                container.innerHTML += `<div class="text-red-500 font-bold text-2xl rotate-12 border-4 border-red-500 p-2 rounded transform">SCONFITTO</div>`;
-                return;
-            }
+                const potentialVictims = targetsWithScore.filter(t => t.score === minScore);
 
-            const cardsDiv = document.createElement('div');
-            cardsDiv.className = 'flex gap-2 justify-center items-center w-full h-full';
-            
-            pData.field.forEach((cardInstance, index) => {
-                const cardDef = __CARD_DEFINITIONS[cardInstance.id];
-                if (!cardDef) return;
-
-                const isSelected = selectedActiveCardId === cardInstance.uniqueId;
-                const isTarget = selectedTargetPlayerId === pId && selectedTargetCardIndex === index;
+                const victim = potentialVictims[Math.floor(Math.random() * potentialVictims.length)];
                 
-                // Stili interattivi
-                let borderClass = 'border-gray-600';
-                if (isSelected) borderClass = 'border-yellow-400 ring-2 ring-yellow-400';
-                if (isTarget) borderClass = 'border-red-500 ring-4 ring-red-600';
+                votes[`votes.${bot.uid}`] = victim.uid;
+            });
+            return votes;
+          };
 
-                // Costruisci la card HTML
-                const cardHtml = document.createElement('div');
-                cardHtml.className = `relative transition-all duration-300 transform ${isMe ? 'hover:-translate-y-2' : ''}`;
-                
-                // Immagine e stat
-                const imgUrl = cardDef.img || `https://placehold.co/150x150/5082E4/FFFFFF?text=${cardInstance.name}`;
-                
-                cardHtml.innerHTML = `
-                    <div class="card-container" style="height: 180px; width: 120px;">
-                        <div class="card ability-${cardDef.ability.toLowerCase()} ${borderClass}">
-                            <div class="card-front text-xs p-2">
-                                <h4 class="text-xs font-bold text-center mb-1 w-full card-name-text leading-tight" title="${cardInstance.name}">${cardInstance.name}</h4>
-                                <img src="${imgUrl}" onerror="this.onerror=null;this.src='https://placehold.co/150x150/5082E4/FFFFFF?text=X'" class="w-16 h-16 rounded-full object-cover mb-1 border border-gray-500 bg-gray-900">
-                                
-                                <div class="w-full text-center mt-1">
-                                    <div class="bg-gray-900 rounded px-1 mb-1">
-                                        <span class="text-red-400 font-bold">${cardInstance.hp}</span> <span class="text-gray-500">/</span> <span class="text-gray-400">${cardInstance.maxHp}</span> HP
+          const calculateCeremonyResults = (lobbyState, currentVotes, isMerge) => {
+              const counts = {};
+              const activePlayers = lobbyState.players.filter(p => p.status === 'active');
+              const validTargetIds = isMerge 
+                ? activePlayers.filter(p => !(lobbyState.immunity || []).includes(p.uid)).map(p => p.uid)
+                : activePlayers.filter(p => p.team === lobbyState.losingTeam).map(p => p.uid);
+
+              Object.values(currentVotes).forEach(tId => {
+                  if (validTargetIds.includes(tId)) {
+                      counts[tId] = (counts[tId] || 0) + 1;
+                  }
+              });
+
+              const sortedVictims = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+              
+              if (sortedVictims.length === 0 && validTargetIds.length > 0) {
+                  const rnd = validTargetIds[Math.floor(Math.random() * validTargetIds.length)];
+                  return { safe: validTargetIds.filter(id => id !== rnd), bottomTwo: [rnd], eliminated: rnd, voteCounts: counts, tie: null };
+              }
+
+              const maxVotes = counts[sortedVictims[0]];
+              const ties = sortedVictims.filter(id => counts[id] === maxVotes);
+              
+              if (ties.length > 1) {
+                  return { safe: validTargetIds.filter(id => !ties.includes(id)), bottomTwo: ties, eliminated: null, voteCounts: counts, tie: ties };
+              }
+
+              const elimId = sortedVictims[0];
+              const bottomTwo = sortedVictims.slice(0, 2);
+              if (!bottomTwo.includes(elimId)) bottomTwo[1] = elimId;
+              
+              let safe = validTargetIds.filter(id => !bottomTwo.includes(id));
+              safe.sort((a, b) => (counts[a] || 0) - (counts[b] || 0));
+              
+              return { safe, bottomTwo, eliminated: elimId, voteCounts: counts, tie: null };
+          };
+
+          const handleInteraction = async (type) => {
+              const targetId = selectedPlayer?.uid;
+              if (!targetId || lobby.phase !== 'social' || hasActed || myPlayer.status === 'eliminated') return;
+              
+              let msg = "";
+              let updatedPlayers = [...lobby.players];
+              const targetIdx = updatedPlayers.findIndex(p => p.uid === targetId);
+              
+              if (type === 'friend') {
+                  if (Math.random() > 0.5) {
+                      const newVal = Math.min(5, (updatedPlayers[targetIdx].relationships[user.uid] || 0) + 1);
+                      updatedPlayers[targetIdx].relationships = { ...updatedPlayers[targetIdx].relationships, [user.uid]: newVal };
+                      msg = `Hai stretto amicizia con ${updatedPlayers[targetIdx].name}.`;
+                  } else msg = `${updatedPlayers[targetIdx].name} ti ha ignorato.`;
+              } 
+              else if (type === 'callout') {
+                  if (Math.random() > 0.4) {
+                     const randomOther = updatedPlayers.find(p => p.isBot && p.uid !== targetId && p.uid !== user.uid);
+                     if (randomOther) {
+                         const rIdx = updatedPlayers.findIndex(p => p.uid === randomOther.uid);
+                         updatedPlayers[rIdx].relationships = { ...updatedPlayers[rIdx].relationships, [targetId]: Math.max(-5, (updatedPlayers[rIdx].relationships[targetId] || 0) - 2) };
+                         msg = `Call Out su ${updatedPlayers[targetIdx].name} riuscito!`;
+                     } else msg = "Call Out: nessuno ha ascoltato.";
+                  } else { 
+                     updatedPlayers[targetIdx].relationships = { ...updatedPlayers[targetIdx].relationships, [user.uid]: Math.max(-5, (updatedPlayers[targetIdx].relationships[user.uid] || 0) - 2) };
+                     msg = `${updatedPlayers[targetIdx].name} si è offeso per il tuo Call Out.`;
+                  }
+              }
+              else if (type === 'alliance') {
+                 if ((updatedPlayers[targetIdx].relationships[user.uid] || 0) <= 0) {
+                     alert("Devi essere amico per proporre un'alleanza!");
+                     return; 
+                 }
+                 
+                 const currentAlliances = Array.isArray(updatedPlayers[targetIdx].alliances) ? updatedPlayers[targetIdx].alliances : [];
+                 const myAlliances = Array.isArray(myPlayer.alliances) ? myPlayer.alliances : [];
+
+                 if (Math.random() > 0.5) {
+                     const p1Allies = [...currentAlliances, user.uid];
+                     const p2Allies = [...myAlliances, targetId];
+                     
+                     updatedPlayers[targetIdx].alliances = [...new Set(p1Allies)];
+                     updatedPlayers.find(p => p.uid === user.uid).alliances = [...new Set(p2Allies)];
+                     
+                     msg = `Alleanza formata con ${updatedPlayers[targetIdx].name}!`;
+                 } else msg = `${updatedPlayers[targetIdx].name} ha rifiutato l'alleanza.`;
+              }
+
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                  players: updatedPlayers,
+                  logs: arrayUnion(msg)
+              });
+              setHasActed(true);
+              setSelectedPlayer(null);
+          };
+
+          const submitVote = async (targetId) => {
+              if (!targetId || lobby.phase !== 'voting') return;
+              
+              const myTeam = myPlayer.team;
+              const losingTeam = lobby.losingTeam;
+              if (!isMerge && myTeam !== losingTeam) {
+                  alert("NON PUOI VOTARE! Il tuo team ha vinto l'immunità.");
+                  return;
+              }
+
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                  [`votes.${user.uid}`]: targetId
+              });
+          };
+
+          const teams = useMemo(() => {
+             const groups = {};
+             (lobby.config.numTeams > 0 ? TEAM_NAMES.slice(0, lobby.config.numTeams) : ["MERGE"]).forEach(t => groups[t] = []);
+             if (isMerge) groups["MERGE"] = activePlayers;
+             else activePlayers.forEach(p => { if (!groups[p.team]) groups[p.team] = []; groups[p.team].push(p); });
+             return groups;
+          }, [activePlayers, isMerge, lobby.config.numTeams]);
+
+          return (
+            <div className="flex h-screen bg-cover bg-center text-white overflow-hidden font-sans" style={{ backgroundImage: `url('${currentSeason.bg}')` }}>
+               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+               
+               {selectedPlayer && lobby.phase === 'social' && (
+                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+                       <div className="bg-slate-900 rounded-2xl border-2 border-yellow-500 max-w-sm w-full relative">
+                           <button onClick={() => setSelectedPlayer(null)} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"><X size={20}/></button>
+                           <div className="p-6 text-center">
+                               <h2 className="text-3xl font-black mb-1">{selectedPlayer.name}</h2>
+                               <div className="text-sm text-slate-400 mb-4">{selectedPlayer.team || "Merge"}</div>
+                               <div className="grid grid-cols-2 gap-4 mb-6">
+                                   <div className="bg-slate-800 p-2 rounded">
+                                       <div className="text-xs uppercase">Amicizia</div>
+                                       <div className={`text-xl font-bold ${(selectedPlayer.relationships[user.uid] || 0) > 0 ? 'text-green-500' : 'text-red-500'}`}>{selectedPlayer.relationships[user.uid] || 0}</div>
+                                   </div>
+                                   <div className="bg-slate-800 p-2 rounded">
+                                       <div className="text-xs uppercase">Alleato?</div>
+                                       <div className="text-xl font-bold">{(Array.isArray(selectedPlayer.alliances) && selectedPlayer.alliances.includes(user.uid)) ? "SÌ" : "NO"}</div>
+                                   </div>
+                               </div>
+                               {!hasActed && myPlayer.status === 'active' && (
+                                   <div className="space-y-2">
+                                       <button onClick={() => handleInteraction('friend')} className="w-full bg-green-600 py-3 rounded font-bold flex justify-center gap-2"><Heart/> Amicizia</button>
+                                       <button onClick={() => handleInteraction('alliance')} className="w-full bg-blue-600 py-3 rounded font-bold flex justify-center gap-2"><Swords/> Alleanza</button>
+                                       <button onClick={() => handleInteraction('callout')} className="w-full bg-orange-600 py-3 rounded font-bold flex justify-center gap-2"><AlertTriangle/> Call Out</button>
+                                   </div>
+                               )}
+                           </div>
+                       </div>
+                   </div>
+               )}
+
+               <div className="hidden md:flex relative w-64 bg-slate-900/90 border-r border-slate-700 flex-col z-10">
+                  <div className="p-4 border-b border-slate-700">
+                     <h2 className="text-lg font-black text-yellow-400 uppercase">{currentSeason.name}</h2>
+                     <div className="text-xs font-bold text-slate-400">EPISODIO {Math.ceil(lobby.round)}</div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2">
+                     {lobby.logs.slice().reverse().map((l, i) => (
+                         <div key={i} className="mb-1 text-xs opacity-80 border-l-2 border-slate-600 pl-2 py-1">{l}</div>
+                     ))}
+                  </div>
+               </div>
+
+               <div className="flex-1 flex flex-col relative z-0 overflow-hidden">
+                  <div className="h-14 bg-slate-800/90 flex items-center justify-between px-4 z-20 border-b border-white/10">
+                     <div className="font-bold italic text-white flex items-center gap-2">
+                        {lobby.phase === 'challenge' && "SFIDA IN CORSO"}
+                        {lobby.phase === 'social' && "SOCIALIZZAZIONE"}
+                        {lobby.phase === 'voting' && "CABINA ELETTORALE"}
+                        {lobby.phase === 'ceremony' && "CERIMONIA"}
+                        {lobby.phase === 'final_showdown' && "GRAN FINALE"}
+                        {lobby.phase === 'season_setup' && "SETUP STAGIONE"}
+                     </div>
+                     {isHost && lobby.phase !== 'final_showdown' && lobby.phase !== 'season_setup' && (
+                        <button onClick={advanceGame} className="bg-yellow-500 hover:bg-yellow-400 text-black font-black px-4 py-1 rounded shadow text-sm flex items-center gap-2">
+                           {lobby.phase === 'ceremony' ? (lobby.ceremonyData?.finalReveal && !lobby.ceremonyData?.tieMatch ? 'FINISCI' : lobby.ceremonyData?.tieMatch ? 'SPAREGGIO' : 'RIVELA') : 'AVANTI'} <ArrowRight size={16} />
+                        </button>
+                     )}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 relative">
+                     
+                    {lobby.phase === 'season_setup' && isHost && nextSeasonConfig && (
+                        <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+                            <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl border-2 border-yellow-500 max-w-lg w-full">
+                                <h2 className="text-3xl font-black text-center mb-6 text-yellow-400">CONFIGURA STAGIONE {lobby.currentSeasonIndex + 2}</h2>
+                                <p className="text-slate-400 text-center mb-8">La stagione precedente si è conclusa. Decidi i parametri per la nuova stagione con i concorrenti che ritornano (Max: {lobby.players.length}).</p>
+
+                                <div className="space-y-6">
+                                    
+                                    <div>
+                                        <label className="block text-slate-400 font-bold mb-2 flex justify-between items-center">
+                                            Concorrenti di Ritorno
+                                        </label>
+                                        <div className="flex items-center gap-4">
+                                            <input 
+                                                type="range" 
+                                                min="2" 
+                                                max={lobby.players.length} 
+                                                value={nextSeasonConfig.returningCount} 
+                                                onChange={e => setNextSeasonConfig({...nextSeasonConfig, returningCount: parseInt(e.target.value)})} 
+                                                className="flex-1 accent-yellow-500" 
+                                            />
+                                            <span className="text-2xl font-bold w-12 text-center">{nextSeasonConfig.returningCount}</span>
+                                        </div>
                                     </div>
-                                    <div class="flex justify-between text-[10px] px-1">
-                                        <span class="text-green-400">ATK ${cardInstance.attack}</span>
-                                        <span class="text-blue-400">DEF ${cardInstance.defense}</span>
+                                    
+                                    <div>
+                                        <label className="block text-slate-400 font-bold mb-2">Nuovo Numero di Squadre (2 - 8)</label>
+                                        <div className="flex items-center gap-4">
+                                            <input 
+                                                type="range" 
+                                                min="2" 
+                                                max="8" 
+                                                value={nextSeasonConfig.numTeams} 
+                                                onChange={e => setNextSeasonConfig({...nextSeasonConfig, numTeams: parseInt(e.target.value)})} 
+                                                className="flex-1 accent-blue-500" 
+                                            />
+                                            <span className="text-2xl font-bold w-12 text-center">{nextSeasonConfig.numTeams}</span>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-slate-400 font-bold mb-2 flex justify-between items-center">
+                                            Dimensione della Fusione (Merge)
+                                            <span className="text-sm text-slate-500">(Max: {nextSeasonConfig.returningCount})</span>
+                                        </label>
+                                        <div className="flex items-center gap-4">
+                                            <input 
+                                                type="range" 
+                                                min="2" 
+                                                max={nextSeasonConfig.returningCount} 
+                                                value={nextSeasonConfig.mergeSize} 
+                                                onChange={e => setNextSeasonConfig({...nextSeasonConfig, mergeSize: parseInt(e.target.value)})} 
+                                                className="flex-1 accent-red-500" 
+                                            />
+                                            <span className="text-2xl font-bold w-12 text-center">{nextSeasonConfig.mergeSize}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-center pt-6">
+                                        <button 
+                                            onClick={() => startNextSeason(nextSeasonConfig)} 
+                                            className="bg-green-600 hover:bg-green-500 text-white py-3 px-8 rounded-xl font-black text-xl shadow-lg transition transform hover:scale-105"
+                                        >
+                                            INIZIA STAGIONE {lobby.currentSeasonIndex + 2}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                `;
+                    )}
+                     
+                     {lobby.phase === 'challenge' && isMerge && lobby.challengeData && (
+                        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                            {lobby.challengeData.stage === 'rolling' ? (
+                                <div className="text-center animate-pulse">
+                                    <h2 className="text-3xl font-bold mb-4">LANCIO DEI DADI...</h2>
+                                    
+                                    <div className="mb-8">
+                                        <div className="text-2xl font-bold text-slate-300">Tocca a:</div>
+                                        <div className="text-5xl font-black text-yellow-400">
+                                            {lobby.players.find(p => p.uid === lobby.challengeData.players[lobby.challengeData.rollingIndex])?.name || "..."}
+                                        </div>
+                                    </div>
+                                    
+                                    {lobby.challengeData.players[lobby.challengeData.rollingIndex] === user.uid && (
+                                        <button onClick={handleUserRoll} className="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-2xl px-12 py-6 rounded-2xl shadow-xl hover:scale-105 transition animate-bounce mb-8">
+                                            <Dices size={32} className="inline mr-2"/> CLICCA PER LANCIARE
+                                        </button>
+                                    )}
 
-                // Logica click per selezione/target
-                cardHtml.onclick = () => {
-                    if (isMe && isMyTurn && !selectedMove) {
-                        setActiveCard(cardInstance.uniqueId);
-                    } else if (!isMe && isMyTurn && selectedMove) {
-                        setTarget(pId, index);
-                    }
-                };
-
-                cardsDiv.appendChild(cardHtml);
-            });
-
-            container.appendChild(cardsDiv);
-        };
-
-        const handleReplacementSelection = (myData, defeatedUniqueId) => {
-            const container = document.getElementById('replacement-deck-cards');
-            const defeatedCard = Object.values(currentGameState.playerData).flatMap(p => p.field).find(c => c.uniqueId === defeatedUniqueId);
-
-            document.getElementById('defeated-card-name').textContent = defeatedCard ? defeatedCard.name : 'Carta Sconosciuta';
-            document.getElementById('select-replacement').classList.remove('hidden');
-            container.innerHTML = '';
-
-            // Renderizza il deck per la selezione
-            myData.deck.forEach(cardId => {
-                const cardDef = __CARD_DEFINITIONS[cardId];
-                if (!cardDef) return;
-
-                const imgUrl = cardDef.img || `https://placehold.co/150x150/5082E4/FFFFFF?text=${cardDef.name}`;
-
-                container.innerHTML += `
-                    <div class="card-container" onclick="submitReplacement('${cardId}', '${defeatedUniqueId}')">
-                        <div class="card ability-${cardDef.ability.toLowerCase()}">
-                            <div class="card-front text-xs justify-center p-3">
-                                <h4 class="text-sm font-bold text-center mb-1 w-full card-name-text">${cardDef.name}</h4>
-                                <img src="${imgUrl}" onerror="this.onerror=null;this.src='https://placehold.co/150x150/5082E4/FFFFFF?text=${cardDef.name.substring(0, 10)}'" class="w-16 h-16 rounded-full object-cover mb-2">
-                                <p class="text-xs text-red-400">HP: ${cardDef.maxHp}</p>
-                                <button class="mt-2 w-full py-1 text-xs rounded bg-green-600 hover:bg-green-700">Sostituisci</button>
-                            </div>
+                                    <div className="flex flex-wrap gap-4 justify-center">
+                                        {Object.entries(lobby.challengeData.rolls).map(([uid, val]) => {
+                                            const p = lobby.players.find(pl => pl.uid === uid);
+                                            return (
+                                                <div key={uid} className="bg-slate-800 p-4 rounded-xl flex flex-col items-center border border-slate-600 animate-in zoom-in">
+                                                    <img src={p.character.img} className="w-12 h-12 rounded-full mb-2"/>
+                                                    <div className="text-3xl font-black">{val}</div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center animate-in zoom-in duration-500">
+                                     <Trophy size={80} className="text-yellow-400 mx-auto mb-4"/>
+                                     <h1 className="text-5xl font-black text-white mb-2">IMMUNITÀ</h1>
+                                     <div className="text-2xl text-yellow-400 font-bold mb-8">
+                                         {lobby.immunity.map(uid => lobby.players.find(p => p.uid === uid)?.name).join(", ")}
+                                     </div>
+                                     {isHost && <div className="text-sm text-slate-400">Clicca Avanti per continuare</div>}
+                                </div>
+                            )}
                         </div>
-                    </div>
-                `;
-            });
+                     )}
 
-            if (myData.deck.length === 0) {
-                 document.getElementById('select-replacement').innerHTML = `<h4 class="text-lg font-bold mb-3 text-red-400">Il tuo Deck è Vuoto. Hai perso questa carta.</h4>`;
-                 // Se il deck è vuoto e non ci sono carte in campo, finisce la partita per il giocatore.
-                 if (myData.field.length === 0) {
-                     submitReplacement('NO_REPLACEMENT', defeatedUniqueId); // Invia una mossa 'rinuncia'
-                 }
-            }
+                     {lobby.phase === 'voting' && (
+                         <div className="flex flex-col items-center">
+                             <h2 className="text-3xl font-black mb-2 flex items-center gap-2"><Vote /> CHI VUOI ELIMINARE?</h2>
+                             
+                             {!isMerge && myPlayer.team !== lobby.losingTeam ? (
+                                 <div className="mt-8 bg-green-600/20 border-2 border-green-500 p-8 rounded-2xl text-center animate-in zoom-in">
+                                     <Coffee size={48} className="mx-auto mb-4 text-green-400" />
+                                     <h3 className="text-2xl font-black text-green-400 mb-2">SEI SALVO!</h3>
+                                     <p className="text-slate-300">Il tuo team ha vinto l'immunità. Rilassati e guarda il team <span className="font-bold text-red-400">{lobby.losingTeam}</span> scannarsi.</p>
+                                 </div>
+                             ) : (
+                                <>
+                                 <p className="mb-8 text-slate-400">Clicca sul concorrente per votarlo. Il voto è segreto.</p>
+                                 
+                                 {myPlayer.status === 'eliminated' ? (
+                                     <div className="text-xl text-red-500 font-bold">SEI STATO ELIMINATO, NON PUOI VOTARE.</div>
+                                 ) : (
+                                     <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
+                                         {activePlayers.map(p => {
+                                             const canVoteFor = (!isMerge && p.team === lobby.losingTeam) || (isMerge && !(lobby.immunity || []).includes(p.uid));
+                                             if (!canVoteFor || p.uid === user.uid) return null;
+                                             
+                                             const iVotedFor = lobby.votes?.[user.uid] === p.uid;
+
+                                             return (
+                                                 <button 
+                                                    key={p.uid} 
+                                                    onClick={() => submitVote(p.uid)}
+                                                    className={`relative group rounded-xl overflow-hidden aspect-[3/4] transition-all ${iVotedFor ? 'ring-4 ring-red-600 scale-105' : 'hover:scale-105 opacity-80 hover:opacity-100'}`}
+                                                 >
+                                                     <img src={p.character.img} className="w-full h-full object-cover"/>
+                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-black text-red-500 text-xl tracking-widest bg-black/60">
+                                                         VOTA
+                                                     </div>
+                                                     {iVotedFor && <div className="absolute inset-0 flex items-center justify-center bg-red-600/50 font-black text-white">VOTATO</div>}
+                                                 </button>
+                                             )
+                                         })}
+                                     </div>
+                                 )}
+                                 <div className="mt-8 text-slate-500 italic">Attendi che l'host chiuda le votazioni...</div>
+                               </>
+                             )}
+                         </div>
+                     )}
+
+                     {lobby.phase === 'final_showdown' && lobby.finalData && (
+                         <div className="flex flex-col items-center h-full">
+                             <h1 className="text-4xl font-black text-yellow-400 mb-8 uppercase tracking-widest">GRAN FINALE</h1>
+                             
+                             <div className="flex items-center justify-center gap-12 w-full max-w-4xl mb-12">
+                                 <div className="text-center">
+                                     <img src={activePlayers[0].character.img} className="w-32 h-32 rounded-full border-4 border-blue-500 object-cover mb-4"/>
+                                     <h2 className="text-2xl font-bold">{activePlayers[0].name}</h2>
+                                     
+                                     {lobby.finalData.currentRolls?.[activePlayers[0].uid] ? (
+                                         <div className="text-4xl font-black text-white bg-blue-600 p-4 rounded-xl mt-4 animate-in zoom-in">
+                                             {lobby.finalData.currentRolls[activePlayers[0].uid]}
+                                         </div>
+                                     ) : (
+                                         <div className="text-slate-500 mt-4 italic animate-pulse">Lancio in corso...</div>
+                                     )}
+
+                                     <div className="text-6xl font-black mt-2 text-blue-400">{lobby.finalData.p1Score}</div>
+                                 </div>
+                                 
+                                 <div className="text-4xl font-black text-slate-600">VS</div>
+
+                                 <div className="text-center">
+                                     <img src={activePlayers[1].character.img} className="w-32 h-32 rounded-full border-4 border-red-500 object-cover mb-4"/>
+                                     <h2 className="text-2xl font-bold">{activePlayers[1].name}</h2>
+                                     
+                                     {lobby.finalData.currentRolls?.[activePlayers[1].uid] ? (
+                                         <div className="text-4xl font-black text-white bg-red-600 p-4 rounded-xl mt-4 animate-in zoom-in">
+                                             {lobby.finalData.currentRolls[activePlayers[1].uid]}
+                                         </div>
+                                     ) : (
+                                         <div className="text-slate-500 mt-4 italic animate-pulse">Lancio in corso...</div>
+                                     )}
+
+                                     <div className="text-6xl font-black mt-2 text-red-400">{lobby.finalData.p2Score}</div>
+                                 </div>
+                             </div>
+
+                             {activePlayers.find(p => p.uid === user.uid) && !lobby.finalData.currentRolls?.[user.uid] && (
+                                 <button onClick={handleFinalRoll} className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-black text-2xl py-4 px-12 rounded-full shadow-lg hover:scale-105 transition flex items-center gap-4 animate-bounce">
+                                     <Dices size={32}/> LANCIA IL TUO DADO
+                                 </button>
+                             )}
+                             
+                             {isHost && 
+                              lobby.finalData.currentRolls && 
+                              Object.keys(lobby.finalData.currentRolls).length >= 2 && (
+                                 <button onClick={resolveFinalRound} className="bg-green-600 text-white font-black text-xl py-3 px-8 rounded-full shadow-lg hover:scale-105 transition flex items-center gap-2 mt-8 animate-pulse">
+                                     <Award size={24}/> ASSEGNA PUNTO
+                                 </button>
+                             )}
+
+                             <div className="mt-4 text-slate-400">Vince chi arriva prima a 3 vittorie!</div>
+                         </div>
+                     )}
+
+                     {lobby.phase === 'game_over' && (
+                         <div className="flex flex-col items-center h-full justify-center">
+                             <h1 className="text-5xl font-black text-yellow-400 mb-4">CLASSIFICA FINALE</h1>
+                             <div className="w-full max-w-xl relative">
+                                <div className="bg-slate-800 rounded-xl overflow-hidden shadow-2xl max-h-[60vh] overflow-y-auto border border-slate-700">
+                                     {lobby.rankings.slice().reverse().map((r, i) => {
+                                         const charImg = ROSTER.find(c => c.name === r.name)?.img || "";
+                                         return (
+                                             <div key={i} className={`flex items-center justify-between p-4 border-b border-slate-700 ${i === 0 ? 'bg-gradient-to-r from-yellow-500/20 to-transparent' : 'hover:bg-slate-700/50'}`}>
+                                                 <div className="flex items-center gap-4">
+                                                     <div className={`font-black text-xl w-8 text-center flex-shrink-0 ${i === 0 ? 'text-yellow-400 scale-125' : 'text-slate-500'}`}>
+                                                        {i === 0 ? <Crown size={24} className="mx-auto"/> : i+1}
+                                                     </div>
+                                                     
+                                                     <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-slate-600 flex-shrink-0">
+                                                        {charImg && <img src={charImg} className="w-full h-full object-cover"/>}
+                                                     </div>
+
+                                                     <div>
+                                                         <div className={`font-bold text-lg ${i === 0 ? 'text-yellow-100' : 'text-white'}`}>{r.name}</div>
+                                                         <div className="text-xs text-slate-400 uppercase">{r.season} • {r.team}</div>
+                                                     </div>
+                                                 </div>
+                                                 <div className="font-mono text-sm text-slate-500 bg-slate-900 px-2 py-1 rounded">
+                                                     {i === 0 ? "VINCITORE" : `Eliminato: ${r.round}`}
+                                                 </div>
+                                             </div>
+                                         )
+                                     })}
+                                </div>
+                                <div className="absolute -bottom-8 left-0 right-0 flex justify-center text-slate-500 animate-bounce">
+                                   <ChevronDown size={32} />
+                                </div>
+                             </div>
+                         </div>
+                     )}
+
+                     {(lobby.phase === 'social' || lobby.phase === 'ceremony') && (
+                         <>
+                         {lobby.phase === 'social' && !isMerge && lobby.losingTeam && (
+                            <div className="bg-red-600/90 text-white p-4 rounded-xl mb-4 text-center font-black text-xl shadow-lg border-2 border-red-400 animate-pulse">
+                               IL TEAM {lobby.losingTeam.toUpperCase()} HA PERSO! <br/>
+                            </div>
+                         )}
+
+                         {lobby.phase === 'ceremony' && lobby.ceremonyData ? (
+                            <div className="flex flex-col items-center justify-center min-h-[50vh]">
+                                {lobby.ceremonyData.tieMatch ? (
+                                     <div className="text-center">
+                                         <h2 className="text-3xl font-black text-red-500 mb-4 animate-bounce">PAREGGIO!</h2>
+                                         <p className="mb-6">Spareggio dadi: Chi fa il numero più basso ESCE.</p>
+                                         
+                                         {(lobby.ceremonyData.tieMatch.candidates || []).includes(user.uid) && !lobby.ceremonyData.tieMatch.rolls[user.uid] && (
+                                             <button onClick={handleTieBreakRoll} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black text-xl mb-8 animate-pulse shadow-xl">
+                                                 LANCIA DADO SALVEZZA
+                                             </button>
+                                         )}
+
+                                         <div className="flex gap-8 justify-center">
+                                             {lobby.ceremonyData.tieMatch.candidates.map(uid => {
+                                                 const p = lobby.players.find(pl => pl.uid === uid);
+                                                 const roll = lobby.ceremonyData.tieMatch.rolls[uid];
+                                                 return (
+                                                     <div key={uid} className="bg-slate-800 p-6 rounded-xl flex flex-col items-center border-2 border-slate-600">
+                                                         <img src={p.character.img} className="w-24 h-24 rounded-full mb-4 border-4 border-slate-500"/>
+                                                         <div className="text-xl font-bold mb-2">{p.name}</div>
+                                                         {roll ? (
+                                                             <div className="text-4xl font-black text-yellow-400">{roll}</div>
+                                                         ) : (
+                                                             <div className="text-slate-500 italic animate-pulse">Sta lanciando...</div>
+                                                         )}
+                                                     </div>
+                                                 )
+                                             })}
+                                         </div>
+                                     </div>
+                                ) : (
+                                    <>
+                                    <Flame size={64} className="text-orange-500 animate-pulse mb-4" />
+                                    <h2 className="text-3xl font-black text-white mb-6">IL FUOCO DECIDE</h2>
+                                    
+                                    <div className="flex flex-wrap justify-center gap-2 mb-8 max-w-3xl">
+                                        {lobby.ceremonyData.safe.slice(0, lobby.ceremonyData.revealedCount).map(uid => {
+                                            const p = lobby.players.find(pl => pl.uid === uid);
+                                            const votes = lobby.ceremonyData.voteCounts?.[uid] || 0;
+                                            return (
+                                                <div key={uid} className="bg-green-600/20 border border-green-500 p-2 rounded flex flex-col items-center min-w-[80px] animate-in fade-in zoom-in">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <img src={p.character.img} className="w-8 h-8 rounded-full object-cover"/>
+                                                        <span className="font-bold text-sm">{p.name}</span>
+                                                    </div>
+                                                    <div className="text-xs bg-black/40 px-2 rounded-full text-slate-300">
+                                                        {votes} voti
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    
+                                    {lobby.ceremonyData.revealedCount >= lobby.ceremonyData.safe.length && (
+                                        <div className="flex gap-8 items-center mt-4">
+                                            {lobby.ceremonyData.bottomTwo.map(uid => {
+                                                const p = lobby.players.find(pl => pl.uid === uid);
+                                                const isEliminated = lobby.ceremonyData.finalReveal && uid === lobby.ceremonyData.eliminated;
+                                                const isSafe = lobby.ceremonyData.finalReveal && uid !== lobby.ceremonyData.eliminated;
+                                                const votes = lobby.ceremonyData.voteCounts?.[uid] || 0;
+                                                const showVotes = isEliminated || (isSafe && lobby.ceremonyData.finalReveal);
+
+                                                return (
+                                                    <div key={uid} className={`flex flex-col items-center transition-all duration-1000 ${isEliminated ? 'opacity-50 grayscale scale-90' : isSafe ? 'scale-110 ring-4 ring-green-500 rounded-xl' : ''}`}>
+                                                        <img src={p.character.img} className="w-32 h-32 object-cover rounded-xl border-4 border-white shadow-2xl"/>
+                                                        <div className="font-black text-xl mt-2 bg-black/50 px-2 rounded">{p.name}</div>
+                                                        <div className="font-mono text-yellow-400 font-bold mt-1 text-lg">
+                                                            {showVotes ? `${votes} voti` : "?"}
+                                                        </div>
+                                                        {isEliminated && <div className="text-red-500 font-black text-2xl mt-2 rotate-12 border-4 border-red-500 px-4 rounded-xl bg-black">ELIMINATO</div>}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                    </>
+                                )}
+                            </div>
+                         ) : (
+                            <div className="space-y-8">
+                               {Object.entries(teams).map(([teamName, players]) => (
+                                   players.length > 0 && (
+                                   <div key={teamName} className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
+                                       <h3 className={`font-black text-lg mb-3 px-2 border-l-4 ${teamName === lobby.losingTeam ? 'border-red-500 text-red-400' : 'border-green-500 text-green-400'}`}>
+                                           {teamName} ({players.length})
+                                       </h3>
+                                       <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                                           {players.map(p => {
+                                               const isMe = p.uid === user.uid;
+                                               const isImmune = (lobby.immunity || []).includes(p.uid);
+                                               const rel = p.relationships[user.uid] || 0;
+                                               const isAlly = Array.isArray(p.alliances) && p.alliances.includes(user.uid);
+
+                                               return (
+                                                   <div 
+                                                     key={p.uid} 
+                                                     onClick={() => !isMe && setSelectedPlayer(p)}
+                                                     className={`relative group bg-slate-800 rounded overflow-hidden shadow-lg transition-all cursor-pointer hover:scale-105 hover:ring-2 hover:ring-white ${isMe ? 'ring-2 ring-yellow-400 cursor-default hover:scale-100' : ''}`}
+                                                   >
+                                                       <div className="aspect-[3/4] relative">
+                                                           <img src={p.character.img} className="w-full h-full object-cover" />
+                                                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                                                           {isImmune && <Shield size={16} className="absolute top-1 right-1 text-yellow-400 fill-yellow-400 drop-shadow-md" />}
+                                                           {!isMe && (
+                                                               <div className="absolute top-1 left-1 flex flex-col gap-1">
+                                                                   {rel !== 0 && (
+                                                                       <div className={`text-[10px] font-black px-1 rounded flex items-center gap-0.5 ${rel > 0 ? 'bg-green-600' : 'bg-red-600'}`}>
+                                                                           <Heart size={8} fill="currentColor"/> {rel}
+                                                                       </div>
+                                                                   )}
+                                                                   {isAlly && (
+                                                                       <div className="text-[10px] font-black bg-blue-600 px-1 rounded flex items-center gap-0.5">
+                                                                           <Swords size={8} />
+                                                                       </div>
+                                                                   )}
+                                                               </div>
+                                                           )}
+                                                           <div className="absolute bottom-0 w-full p-1 text-center">
+                                                               <div className="font-bold text-white text-xs truncate leading-tight">{p.name}</div>
+                                                           </div>
+                                                       </div>
+                                                   </div>
+                                               )
+                                           })}
+                                       </div>
+                                   </div>
+                                   )
+                               ))}
+                            </div>
+                         )}
+                         </>
+                     )}
+                  </div>
+               </div>
+
+               <div className="w-64 bg-slate-900 border-l border-slate-700 flex flex-col z-20">
+                  <div className="p-3 border-b border-slate-700 font-bold text-xs uppercase text-slate-400 flex items-center gap-2">
+                     <MessageSquare size={14} /> Chat Gruppo
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-2" ref={chatRef}>
+                     {lobby.chat?.map((msg, i) => (
+                         <div key={i} className="text-xs">
+                             <span className={`font-bold ${msg.sender === myPlayer.name ? 'text-yellow-400' : 'text-blue-400'}`}>{msg.sender}:</span>
+                             <span className="text-slate-300 ml-1 break-words">{msg.text}</span>
+                         </div>
+                     ))}
+                  </div>
+                  <form onSubmit={sendChat} className="p-2 border-t border-slate-700 flex gap-2">
+                     <input 
+                       value={chatInput}
+                       onChange={e => setChatInput(e.target.value)}
+                       placeholder="Scrivi..."
+                       className="flex-1 bg-slate-800 rounded px-2 py-1 text-xs text-white outline-none focus:ring-1 focus:ring-yellow-500"
+                     />
+                     <button type="submit" className="bg-yellow-500 text-black p-1 rounded hover:bg-yellow-400">
+                        <Send size={14} />
+                     </button>
+                  </form>
+               </div>
+            </div>
+          );
         };
 
-        window.submitReplacement = async (newCardId, defeatedUniqueId) => {
-            if (!currentRoomId) return;
-
-            const move = {
-                playerId: userId,
-                type: 'replacement',
-                defeatedUniqueId: defeatedUniqueId,
-                newCardId: newCardId === 'NO_REPLACEMENT' ? null : newCardId
-            };
-
-            await executeMove(move);
-            resetMoveSelection(); // Resetta lo stato di selezione
-        };
-
-        const handleMoveSelection = (myData) => {
-            document.getElementById('select-move-target').classList.remove('hidden');
-            const activeCardSelectionEl = document.getElementById('active-card-selection');
-            activeCardSelectionEl.innerHTML = '';
-
-            // Seleziona Carta Attiva (Genera bottoni solo se non si clicca sulla carta grafica)
-            myData.field.forEach(cardInstance => {
-                const isSelected = selectedActiveCardId === cardInstance.uniqueId;
-                // Opzionale: pulsanti testuali se preferisci non cliccare sulle carte grafiche
-            });
-
-            // Seleziona Mossa
-            const moveSelectionEl = document.getElementById('move-selection');
-            const targetSelectionEl = document.getElementById('target-selection');
-            const executeBtn = document.getElementById('execute-move-btn');
-
-            if (selectedActiveCardId) {
-                const activeCard = myData.field.find(c => c.uniqueId === selectedActiveCardId);
-                // Se la carta è morta o non trovata, resetta
-                if (!activeCard) { resetMoveSelection(); return; }
-
-                document.getElementById('selected-card-move-name').textContent = activeCard.name;
-                moveSelectionEl.innerHTML = `<h5 class="text-md font-semibold text-gray-400">Mosse di ${activeCard.name}:</h5>`;
-
-                activeCard.moves.forEach((move, index) => {
-                    const isSelected = selectedMove && selectedMove.name === move.name;
-                    moveSelectionEl.innerHTML += `
-                        <button onclick="selectMove('${index}')" class="p-2 rounded-lg transition duration-200 w-full text-left ${isSelected ? 'bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700'}">
-                            ${move.name} <span class="text-xs opacity-75 float-right">Dmg: ${move.damage}</span>
-                        </button>
-                    `;
-                });
-            } else {
-                document.getElementById('selected-card-move-name').textContent = '...';
-                moveSelectionEl.innerHTML = '<p class="text-center text-gray-400 italic">Clicca su una tua carta sul tavolo per iniziare.</p>';
-                targetSelectionEl.classList.add('hidden');
-                executeBtn.disabled = true;
-                return;
-            }
-
-            // Seleziona Bersaglio
-            if (selectedMove) {
-                targetSelectionEl.classList.remove('hidden');
-                if (selectedTargetPlayerId) {
-                    executeBtn.disabled = false;
-                    executeBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                } else {
-                    executeBtn.disabled = true;
-                    executeBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                }
-            } else {
-                targetSelectionEl.classList.add('hidden');
-                executeBtn.disabled = true;
-            }
-        };
-
-        window.setActiveCard = (uniqueId) => {
-            selectedActiveCardId = uniqueId;
-            selectedMove = null; // Resetta la mossa
-            selectedTargetPlayerId = null; // Resetta il bersaglio
-            selectedTargetCardIndex = null;
-            renderGame({ id: currentRoomId, gameState: currentGameState, status: 'playing', players: currentGameState.playerData, mode: document.getElementById('game-mode-display').textContent, hostId: userId }); // HostId non è critico qui per il render
-        };
-
-        window.selectMove = (moveIndex) => {
-            const activeCard = currentGameState.playerData[userId].field.find(c => c.uniqueId === selectedActiveCardId);
-            selectedMove = activeCard.moves[moveIndex];
-            selectedTargetPlayerId = null; // Resetta il bersaglio
-            selectedTargetCardIndex = null;
-            renderGame({ id: currentRoomId, gameState: currentGameState, status: 'playing', players: currentGameState.playerData, mode: document.getElementById('game-mode-display').textContent, hostId: userId });
-        };
-
-        window.setTarget = (playerId, cardIndex) => {
-            selectedTargetPlayerId = playerId;
-            selectedTargetCardIndex = cardIndex;
-            renderGame({ id: currentRoomId, gameState: currentGameState, status: 'playing', players: currentGameState.playerData, mode: document.getElementById('game-mode-display').textContent, hostId: userId });
-        };
-
-        document.getElementById('execute-move-btn').addEventListener('click', async () => {
-            if (selectedActiveCardId && selectedMove) {
-                const activeCard = currentGameState.playerData[userId].field.find(c => c.uniqueId === selectedActiveCardId);
-                const move = {
-                    playerId: userId,
-                    type: 'action',
-                    activeCardUniqueId: selectedActiveCardId,
-                    moveName: selectedMove.name,
-                    targetPlayerId: selectedTargetPlayerId,
-                    targetCardIndex: selectedTargetCardIndex
-                    // Aggiungere dettagli della mossa se necessario per la logica
-                };
-                await executeMove(move);
-                resetMoveSelection();
-            }
-        });
-
-        const resetMoveSelection = () => {
-            selectedActiveCardId = null;
-            selectedMove = null;
-            selectedTargetPlayerId = null;
-            selectedTargetCardIndex = null;
-        };
-
-        // --- Logica Esecuzione Mossa (Comune a Umani e CPU) ---
-        async function executeMove(move) {
-            const roomRef = doc(db, `artifacts/${appId}/public/data`, 'gameSessions', currentRoomId);
-            const gameState = JSON.parse(JSON.stringify(currentGameState)); // Copia profonda dello stato
-
-            let newLogEntry = '';
-            let isReplacementMove = false;
-
-            if (move.type === 'action') {
-                const actingPlayer = gameState.playerData[move.playerId];
-                const activeCard = actingPlayer.field.find(c => c.uniqueId === move.activeCardUniqueId);
-
-                // Trova la mossa dal nome (o indice, ma il nome è più sicuro)
-                const moveDef = activeCard.moves.find(m => m.name === move.moveName);
-
-                // Calcola danno
-                let damage = moveDef.damage;
-
-                // Logica d'attacco semplificata
-                if (move.targetPlayerId && move.targetCardIndex !== null) {
-                    const targetPlayer = gameState.playerData[move.targetPlayerId];
-                    const targetCard = targetPlayer.field[move.targetCardIndex];
-
-                    if (targetCard) {
-                        const effectiveDefense = targetCard.defense;
-                        const finalDamage = Math.max(1, damage - effectiveDefense); // Minimo 1 danno
-                        targetCard.hp -= finalDamage;
-
-                        newLogEntry = `${actingPlayer.name} usa ${move.moveName} su ${targetCard.name} (-${finalDamage} HP)`;
-
-                        // Verifica sconfitta
-                        if (targetCard.hp <= 0) {
-                            targetCard.hp = 0;
-                            newLogEntry += ` -> SCONFITTO!`;
-                            targetPlayer.defeatedCount += 1;
-                            targetPlayer.field.splice(move.targetCardIndex, 1); // Rimuovi dal campo
-
-                            // Controlla se è necessario un rimpiazzo
-                            if (targetPlayer.field.length < targetPlayer.fieldLimit && targetPlayer.deck.length > 0) {
-                                gameState.status = 'select_replacement';
-                                gameState.replacementNeededForPlayer = move.targetPlayerId;
-                                gameState.replacementNeededUniqueId = targetCard.uniqueId;
-                            } else if (targetPlayer.field.length === 0 && targetPlayer.deck.length === 0) {
-                                // Giocatore sconfitto
-                                targetPlayer.status = 'defeated';
-                            }
-                        }
-                    } else {
-                        newLogEntry = `${actingPlayer.name} ha mancato il bersaglio.`;
-                    }
-                }
-
-            } else if (move.type === 'replacement') {
-                isReplacementMove = true;
-                const player = gameState.playerData[move.playerId];
-                const newCardId = move.newCardId;
-
-                if (newCardId) {
-                    // Metti la nuova carta in campo
-                    const cardIndexInDeck = player.deck.indexOf(newCardId);
-                    if (cardIndexInDeck !== -1) {
-                        player.deck.splice(cardIndexInDeck, 1);
-                        const newCardInstance = createCardInstance(newCardId, move.playerId);
-                        player.field.push(newCardInstance);
-                        newLogEntry = `${player.name} schiera ${newCardInstance.name}.`;
-                    } else {
-                        newLogEntry = `${player.name} ha problemi col deck.`;
-                    }
-                } else {
-                    // Nessun rimpiazzo (deck vuoto o scelta)
-                    newLogEntry = `${player.name} non può rimpiazzare.`;
-                }
-
-                // Resetta lo stato di rimpiazzo
-                gameState.status = 'playing';
-                delete gameState.replacementNeededForPlayer;
-                delete gameState.replacementNeededUniqueId;
-            }
-
-            // Aggiungi log
-            gameState.log.unshift(newLogEntry);
-            if (gameState.log.length > 20) gameState.log.pop();
-
-            // Passa al turno successivo solo dopo una mossa d'azione O se il rimpiazzo è completato e non c'è più bisogno di rimpiazzi
-            if (move.type === 'action' || (isReplacementMove && gameState.status === 'playing')) {
-                // Controlla la vittoria
-                const activePlayers = Object.keys(gameState.playerData).filter(pId => gameState.playerData[pId].status === 'alive');
-                if (activePlayers.length <= 1) {
-                    gameState.status = 'finished';
-                    gameState.winnerId = activePlayers[0] || null;
-                    await updateDoc(roomRef, { gameState: gameState, status: 'finished', finishedAt: new Date().toISOString() });
-                    return;
-                }
-
-                // Passa al giocatore successivo
-                if (gameState.status === 'playing') {
-                    do {
-                        gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.playerOrder.length;
-                    } while (gameState.playerData[gameState.playerOrder[gameState.currentPlayerIndex]].status !== 'alive');
-
-                    gameState.turn++;
-                }
-            }
-
-            await updateDoc(roomRef, { gameState: gameState });
-        }
-
-        // Funzione semplificata per la CPU
-        async function executeCPUMove() {
-            const cpuId = currentGameState.playerOrder[currentGameState.currentPlayerIndex];
-            const cpuData = currentGameState.playerData[cpuId];
-            
-            console.log(`Esecuzione mossa CPU per ${cpuData.name}...`);
-
-            if (currentGameState.status === 'select_replacement' && currentGameState.replacementNeededForPlayer === cpuId) {
-                // Mossa di rimpiazzo CPU
-                const newCardId = cpuData.deck[Math.floor(Math.random() * cpuData.deck.length)] || 'NO_REPLACEMENT';
-                const move = {
-                    playerId: cpuId,
-                    type: 'replacement',
-                    defeatedUniqueId: currentGameState.replacementNeededUniqueId,
-                    newCardId: newCardId
-                };
-                await executeMove(move);
-                return;
-            }
-
-            // Mossa d'azione CPU
-            if (cpuData.field.length === 0) return; // Non dovrebbe succedere se il gioco è corretto
-
-            const activeCard = cpuData.field[Math.floor(Math.random() * cpuData.field.length)];
-            const moveDef = activeCard.moves[Math.floor(Math.random() * activeCard.moves.length)];
-
-            // Trova un bersaglio vivo (se necessario)
-            const opponentIds = Object.keys(currentGameState.playerData).filter(pId => pId !== cpuId && currentGameState.playerData[pId].status === 'alive' && currentGameState.playerData[pId].field.length > 0);
-
-            if (opponentIds.length === 0) return; // Nessun bersaglio
-
-            const targetPlayerId = opponentIds[Math.floor(Math.random() * opponentIds.length)];
-            const targetPlayer = currentGameState.playerData[targetPlayerId];
-            const targetCardIndex = Math.floor(Math.random() * targetPlayer.field.length);
-
-            const move = {
-                playerId: cpuId,
-                type: 'action',
-                activeCardUniqueId: activeCard.uniqueId,
-                moveName: moveDef.name,
-                targetPlayerId: targetPlayerId,
-                targetCardIndex: targetCardIndex
-            };
-
-            await executeMove(move);
-        }
-
-        async function handleGameEnd(roomData) {
-            const gameData = roomData.gameState;
-            const myPlayerId = userId;
-            const players = Object.keys(gameData.playerData);
-
-            // Determina il tuo piazzamento
-            const defeatedPlayers = players.filter(id => gameData.playerData[id].status === 'defeated');
-            const myStatus = gameData.playerData[myPlayerId].status;
-
-            let rank = 0;
-            if (myStatus === 'alive') {
-                rank = 1; // Vincitore
-            } else if (roomData.mode === '1v1') {
-                rank = 2; // Sconfitto
-            } else {
-                // Determina il rank in base al numero di sconfitti. Più defeatedCount, migliore è il piazzamento tra i non vincenti
-                const defeatedByCount = players.filter(id => gameData.playerData[id].status === 'defeated').sort((a, b) => gameData.playerData[b].defeatedCount - gameData.playerData[a].defeatedCount);
-                rank = defeatedByCount.findIndex(id => id === myPlayerId) + (players.length - defeatedPlayers.length) + 1;
-            }
-
-            let minCoins = 0, maxCoins = 0;
-            let resultMessage = '';
-
-            if (roomData.mode === '1v1') {
-                if (rank === 1) {
-                    minCoins = 100; maxCoins = 140; resultMessage = "Hai Vinto la partita 1 vs 1!";
-                    await updateUserData({ wins: userData.wins + 1 });
-                } else {
-                    minCoins = 20; maxCoins = 35; resultMessage = "Hai Perso la partita 1 vs 1.";
-                    await updateUserData({ losses: userData.losses + 1 });
-                }
-            } else { // FFA 1v1v1v1
-                if (rank === 1) { minCoins = 100; maxCoins = 140; resultMessage = "Hai Vinto il Free-For-All!"; await updateUserData({ wins: userData.wins + 1 }); }
-                else if (rank === 2) { minCoins = 55; maxCoins = 90; resultMessage = "Secondo posto!"; }
-                else if (rank === 3) { minCoins = 37; maxCoins = 50; resultMessage = "Terzo posto!"; }
-                else { minCoins = 20; maxCoins = 35; resultMessage = "Quarto posto."; await updateUserData({ losses: userData.losses + 1 }); }
-            }
-
-            const earnedCoins = Math.floor(Math.random() * (maxCoins - minCoins + 1) + minCoins);
-            let newCardUnlocked = null;
-            let newUnlockedCards = userData.unlockedCards;
-            let rewardsListHtml = `<li><span class="font-bold text-yellow-300">${earnedCoins} Monete</span></li>`;
-
-            // Chance di trovare una carta nuova per il 1° posto
-            if (rank === 1 && Math.random() < 0.15) { // 15% chance
-                const allCardIds = Object.keys(__CARD_DEFINITIONS);
-                const lockedCards = allCardIds.filter(id => !userData.unlockedCards.includes(id));
-                if (lockedCards.length > 0) {
-                    newCardUnlocked = __CARD_DEFINITIONS[lockedCards[Math.floor(Math.random() * lockedCards.length)]];
-                    newUnlockedCards.push(newCardUnlocked.id);
-                    rewardsListHtml += `<li>Carta Sbloccata: <span class="font-bold text-green-400">${newCardUnlocked.name}</span>!</li>`;
-                }
-            }
-
-            document.getElementById('result-message').textContent = resultMessage;
-            document.getElementById('rewards-list').innerHTML = rewardsListHtml;
-            document.getElementById('game-results').classList.remove('hidden');
-
-            // Aggiorna il profilo utente
-            await updateUserData({ coins: userData.coins + earnedCoins, unlockedCards: newUnlockedCards, lastPlayed: new Date().toISOString() });
-
-            // Cancella la sessione di gioco (solo l'host)
-            if (roomData.hostId === myPlayerId) {
-                try {
-                    await deleteDoc(doc(db, `artifacts/${appId}/public/data`, 'gameSessions', roomData.id));
-                } catch (e) {
-                    console.error("Errore nella cancellazione della sessione dopo la fine:", e);
-                }
-            }
-        }
-
-        // Avvia l'app
-        window.onload = initializeAppAndAuth;
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>

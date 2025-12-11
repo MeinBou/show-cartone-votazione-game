@@ -56,7 +56,8 @@
         import { 
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
           Trophy, Crown, UserPlus, Shield, Swords, Flame, 
-          AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle, Undo2
+          AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle, Undo2,
+          Package, Gem, Lock, Unlock
         } from 'lucide-react';
 
         // --- TUE CHIAVI FIREBASE INSERITE ---
@@ -117,7 +118,7 @@
           { name: "Ponygon", img: "https://i.pinimg.com/736x/53/e4/fb/53e4fb1c1f8964ca949c4e72663edd8f.jpg" },
           { name: "Steven", img: "https://i.pinimg.com/736x/2b/fd/20/2bfd202ab782611ea6a0fb0cdcdc37ab.jpg" },
           { name: "Perla", img: "https://i.pinimg.com/1200x/bf/d3/78/bfd378c4c8921a30ee00cf48bdb7fa11.jpg" },
-          { name: "Lapis", img: "https://i.pinimg.com/736x/88/0f/a5/880fa555f1f954dbca08aded1be846d2.jpg" },
+		  { name: "Lapis", img: "https://i.pinimg.com/736x/88/0f/a5/880fa555f1f954dbca08aded1be846d2.jpg" },
           { name: "Ametista", img: "https://i.pinimg.com/736x/b4/e4/45/b4e445061d31ec75fa4ee63e20ebf87e.jpg" },
           { name: "Nicole", img: "https://i.pinimg.com/736x/81/24/e4/8124e43da43e1d06dcdbca15f22a0cd9.jpg" },
           { name: "Gumball", img: "https://i.pinimg.com/736x/ae/88/e3/ae88e329120b3edc196af1ebbfd8fe07.jpg" },
@@ -150,25 +151,23 @@
           { name: "Fry", img: "https://i.pinimg.com/736x/d6/f4/ac/d6f4acc1bfae65c673b4b5e02a89ce71.jpg" },
           { name: "Leela", img: "https://i.pinimg.com/736x/e9/b2/71/e9b27128376e5b5f23aaafdc9956bd50.jpg" },
           { name: "Kim", img: "https://i.pinimg.com/736x/5d/7d/55/5d7d55fec8f9d8fb81e9db4438235f71.jpg" },
-          { name: "Shego", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
-          { name: "Ben 10", img: "https://i.pinimg.com/736x/b3/c8/eb/b3c8ebedc4123fa33f6e72ff2deff109.jpg" },
-          { name: "Gwen Tennyson", img: "https://i.pinimg.com/736x/f7/59/57/f75957bd5bad8195e2322e58de3f8119.jpg" },
-          { name: "Tom", img: "https://i.pinimg.com/736x/3d/25/d7/3d25d7ea6cc56bf4bb868541014915fd.jpg" },
-          { name: "Ashley", img: "https://i.pinimg.com/736x/53/b6/da/53b6dad67d0575a6e8ce73784657d111.jpg" },
-          { name: "Jake DC", img: "https://i.pinimg.com/736x/bc/a0/76/bca0765eaa0f1e88b0070a5b92c22de7.jpg" },
-          { name: "Hunter", img: "https://i.pinimg.com/736x/0d/f2/73/0df2731820fb9f74774f5e8607556625.jpg" },
           { name: "Tess", img: "https://i.pinimg.com/736x/3f/bc/a9/3fbca9cb61b70f4d58c83598f0236764.jpg" },
-          { name: "Vicky", img: "https://i.pinimg.com/736x/60/c4/17/60c4178a696ba9ce13dd9cc6c93c6e67.jpg" },
-		  { name: "Trixie", img: "https://i.pinimg.com/736x/05/08/a7/0508a771507d83f2b52a97467f57d581.jpg" },
+		  { name: "Hunter", img: "https://i.pinimg.com/736x/0d/f2/73/0df2731820fb9f74774f5e8607556625.jpg" },
+		  { name: "Jake DC", img: "https://i.pinimg.com/736x/bc/a0/76/bca0765eaa0f1e88b0070a5b92c22de7.jpg" },
+		  { name: "Tom", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
+		  { name: "Ashley", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
 		  { name: "Timmy", img: "https://i.pinimg.com/736x/91/de/1b/91de1b5b1897a71a36957191623af776.jpg" },
-          { name: "Cerise", img: "https://i.pinimg.com/736x/7f/bc/61/7fbc61840f3355ec1b1ec39a01444d89.jpg" },
-          { name: "Lucinda", img: "https://i.pinimg.com/736x/94/20/84/942084061ad007e5ad003454fea081b0.jpg" },
-          { name: "Finn", img: "https://i.pinimg.com/736x/d6/76/57/d676578ce5bbb232fd5b58b00097ad96.jpg" },
-          { name: "Fiona", img: "https://i.pinimg.com/1200x/0b/9d/85/0b9d85c6c70be88471ad753b014de88b.jpg" },
-          { name: "Jake", img: "https://i.pinimg.com/1200x/cd/77/22/cd7722b2f98ffc75d1128913df6861d7.jpg" },
-		  {name: "Cake", img: "https://i.pinimg.com/736x/70/6c/08/706c08681ae007b24d103c44910431c1.jpg" },
-		  {name: "Ariana Grande", img: "https://media.tenor.com/1u94p6qR01gAAAAM/ariana-grande-eternal-sunshine.gif" },
-          { name: "Marceline", img: "https://i.pinimg.com/736x/3a/58/7d/3a587db4bdc947c7d3458dc9582af9cd.jpg" }
+		  { name: "Trixie", img: "https://i.pinimg.com/736x/05/08/a7/0508a771507d83f2b52a97467f57d581.jpg" },
+		  { name: "Vicky", img: "https://i.pinimg.com/1200x/f5/1f/2e/f51f2e0bff74df3173b110f24943a6fc.jpg" },
+		  { name: "Finn", img: "https://i.pinimg.com/736x/7e/0b/c9/7e0bc9826a7652264f32a44bc8a40ede.jpg" },
+		  { name: "Fiona", img: "https://i.pinimg.com/1200x/0b/9d/85/0b9d85c6c70be88471ad753b014de88b.jpg" },
+		  { name: "Jake", img: "https://i.pinimg.com/1200x/cd/77/22/cd7722b2f98ffc75d1128913df6861d7.jpg" },
+		  { name: "Cake", img: "https://i.pinimg.com/736x/70/6c/08/706c08681ae007b24d103c44910431c1.jpg" },
+		  { name: "Marceline", img: "https://i.pinimg.com/736x/3a/58/7d/3a587db4bdc947c7d3458dc9582af9cd.jpg" },
+		  { name: "Shego", img: "https://i.pinimg.com/736x/54/70/77/5470771ee32d3350ffa08f921bb3d1ad.jpg" },
+		  { name: "Ariana Grande", img: "https://media.tenor.com/1u94p6qR01gAAAAM/ariana-grande-eternal-sunshine.gif" },
+          { name: "Ben 10", img: "https://i.pinimg.com/736x/b3/c8/eb/b3c8ebedc4123fa33f6e72ff2deff109.jpg" },
+          { name: "Gwen Tennyson", img: "https://i.pinimg.com/736x/f7/59/57/f75957bd5bad8195e2322e58de3f8119.jpg" }
         ];
 
         const TEAM_NAMES = [
@@ -278,7 +277,8 @@
               ceremonyData: null,
               challengeData: null, 
               finalData: null, 
-              redemptionData: null, // Nuovo campo per gestire la redemption
+              redemptionData: null,
+              idolData: null, // Nuovo campo per l'idolo
               timestamp: serverTimestamp()
             };
 
@@ -616,12 +616,26 @@
               team: TEAM_NAMES[idx % numTeams]
             }));
 
+            // --- IDOL SETUP ---
+            const totalCrates = currentPlayers.length;
+            const luckyIndex = Math.floor(Math.random() * totalCrates);
+            // We create simple objects for crates. Content is determined by index vs luckyIndex to avoid cheating by inspecting client data too easily (though serverless implies transparency).
+            // Better: store luckyIndex in idolData.
+            const initialCrates = Array.from({length: totalCrates}, (_, i) => ({ id: i, owner: null }));
+
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
               players: currentPlayers,
               status: 'playing',
-              phase: 'episode_start',
-              round: 1,
-              logs: arrayUnion(`--- INIZIO STAGIONE 1: L'ISOLA ---`)
+              phase: 'idol_hunt', // NEW PHASE
+              idolData: {
+                  active: true,
+                  luckyIndex: luckyIndex,
+                  crates: initialCrates,
+                  stage: 'selection', // selection -> reveal
+                  holder: null
+              },
+              round: 0,
+              logs: arrayUnion(`--- CACCIA ALL'IDOLO DELL'IMMUNITÀ ---`)
             });
           };
 
@@ -707,6 +721,44 @@
             if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
           }, [lobby.chat]);
 
+          // --- IDOL HUNT BOT LOGIC ---
+          useEffect(() => {
+              if (!isHost || lobby.phase !== 'idol_hunt' || !lobby.idolData || lobby.idolData.stage !== 'selection') return;
+
+              const bots = lobby.players.filter(p => p.isBot);
+              const unchosenBots = bots.filter(b => !lobby.idolData.crates.some(c => c.owner === b.uid));
+              
+              if (unchosenBots.length > 0) {
+                  const timer = setTimeout(async () => {
+                      const availableCrates = lobby.idolData.crates.filter(c => c.owner === null);
+                      if (availableCrates.length > 0 && unchosenBots.length > 0) {
+                          const botToAct = unchosenBots[0];
+                          const randomCrate = availableCrates[Math.floor(Math.random() * availableCrates.length)];
+                          
+                          const newCrates = lobby.idolData.crates.map(c => 
+                              c.id === randomCrate.id ? { ...c, owner: botToAct.uid } : c
+                          );
+
+                          // Check if everyone has chosen
+                          const allTaken = newCrates.every(c => c.owner !== null);
+                          let updates = { [`idolData.crates`]: newCrates };
+                          
+                          if (allTaken) {
+                              updates[`idolData.stage`] = 'reveal';
+                              // Assign holder internally
+                              const winnerUid = newCrates.find(c => c.id === lobby.idolData.luckyIndex)?.owner;
+                              updates[`idolData.holder`] = winnerUid;
+                              updates[`logs`] = arrayUnion("Tutte le casse sono state assegnate! Apertura in corso...");
+                          }
+
+                          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
+                      }
+                  }, 500); // Fast selection
+                  return () => clearTimeout(timer);
+              }
+          }, [lobby.idolData, isHost]);
+
+
           // SEQUENTIAL DICE ANIMATION (HOST FOR BOTS ONLY)
           useEffect(() => {
             if (!isHost || lobby.phase !== 'challenge' || !lobby.challengeData || lobby.challengeData.stage !== 'rolling') return;
@@ -720,9 +772,25 @@
                      else if (r === maxRoll) { winners.push(uid); }
                  });
 
-                 // AGGIORNAMENTO IMMUNITÀ (NUOVA LOGICA)
+                 // FIX: LOGICA PAREGGIO (SPAREGGIO)
+                 if (winners.length > 1) {
+                     const winnerNames = winners.map(w => lobby.players.find(p => p.uid === w)?.name).join(", ");
+                     
+                     updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                         [`challengeData.players`]: winners, // Solo loro rilanciano
+                         [`challengeData.rollingIndex`]: 0,
+                         [`challengeData.rolls`]: {}, // Reset dei tiri
+                         logs: arrayUnion(`PAREGGIO (${maxRoll})! Spareggio per l'immunità tra: ${winnerNames}`)
+                     });
+                     return;
+                 }
+
+                 // AGGIORNAMENTO IMMUNITÀ (VINCITORE SINGOLO)
+                 const winnerId = winners[0];
+                 const winnerName = lobby.players.find(p => p.uid === winnerId)?.name;
+
                  const updatedPlayers = lobby.players.map(p => {
-                     if (winners.includes(p.uid)) {
+                     if (p.uid === winnerId) {
                          return { ...p, immunityWins: (p.immunityWins || 0) + 1 };
                      }
                      return p;
@@ -735,7 +803,8 @@
                      immunity: winners,
                      losingTeam: "MERGE",
                      readyPlayers: [], // Reset ready players for social
-                     phase: 'social'
+                     phase: 'social',
+                     logs: arrayUnion(`${winnerName} VINCE L'IMMUNITÀ con ${maxRoll}!`)
                  });
                  return;
             }
@@ -850,6 +919,31 @@
              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
                   [`redemptionData.rolls.${user.uid}`]: roll
              });
+          };
+
+          // --- IDOL HUNT: CLAIM CRATE ---
+          const claimCrate = async (crateId) => {
+              if (lobby.phase !== 'idol_hunt' || lobby.idolData.stage !== 'selection') return;
+              if (lobby.idolData.crates.some(c => c.owner === user.uid)) return; // Already picked
+              if (lobby.idolData.crates.find(c => c.id === crateId).owner !== null) return; // Taken
+
+              const newCrates = lobby.idolData.crates.map(c => 
+                   c.id === crateId ? { ...c, owner: user.uid } : c
+              );
+
+              // Check if everyone has chosen
+              const allTaken = newCrates.every(c => c.owner !== null);
+              
+              let updates = { [`idolData.crates`]: newCrates };
+
+              if (allTaken) {
+                  updates[`idolData.stage`] = 'reveal';
+                  const winnerUid = newCrates.find(c => c.id === lobby.idolData.luckyIndex)?.owner;
+                  updates[`idolData.holder`] = winnerUid;
+                  updates[`logs`] = arrayUnion("Tutte le casse sono state assegnate! Apertura in corso...");
+              }
+
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
           };
 
           const toggleReady = async () => {
@@ -997,7 +1091,18 @@
             let updates = {};
             let newLogs = [];
 
-            if (lobby.phase === 'episode_start') {
+            // --- ADVANCE FROM IDOL HUNT TO EPISODE 1 ---
+            if (lobby.phase === 'idol_hunt') {
+                if (lobby.idolData.stage === 'reveal') {
+                    updates = {
+                        phase: 'episode_start',
+                        round: 1,
+                        logs: arrayUnion(`--- INIZIO STAGIONE 1: L'ISOLA ---`)
+                    }
+                }
+            }
+
+            else if (lobby.phase === 'episode_start') {
               const mergeSize = lobby.config.mergeSize || (lobby.config.maxPlayers / 2);
               
               if (activePlayers.length <= 2) {
@@ -1117,61 +1222,111 @@
               } 
               else {
                   // FINE CERIMONIA
-                  const victim = lobby.players.find(p => p.uid === data.eliminated);
-                  const updatedPlayers = lobby.players.map(p => p.uid === data.eliminated ? { ...p, status: 'eliminated' } : p);
+                  let victimId = data.eliminated;
                   
-                  // LOGICA REDEMPTION CHECK
-                  const nextRound = lobby.round + 1;
-                  const redemptionConfig = lobby.config.redemption;
-                  let isRedemptionEpisode = false;
-                  
-                  if (redemptionConfig && redemptionConfig.enabled && redemptionConfig.episodes) {
-                      // Supporta sia array di numeri che stringa parsata precedentemente
-                      if (Array.isArray(redemptionConfig.episodes)) {
-                           isRedemptionEpisode = redemptionConfig.episodes.includes(nextRound);
+                  // --- IDOL CHECK ---
+                  if (lobby.idolData && lobby.idolData.holder === victimId && lobby.idolData.active) {
+                      newLogs.push(`COLPO DI SCENA! ${lobby.players.find(p => p.uid === victimId).name} usa l'Idolo dell'Immunità!`);
+                      updates[`idolData.active`] = false; // Idol consumed
+                      updates[`idolData.holder`] = null;
+
+                      // Find runner up
+                      const runnerUpId = data.bottomTwo.find(id => id !== victimId);
+                      
+                      // Fallback if unique unanimous vote (rare, array has 1 element)
+                      if (!runnerUpId) {
+                          // Very rare: pick random safe person or just cancel elim. 
+                          // Simple fallback: pick first safe person (lowest votes)
+                          // Or pick the one with next highest votes if available in data.safe?
+                          // Let's grab the last person in safe array (sorted by votes asc usually, or we resort)
+                          // Note: calculateCeremonyResults returns safe sorted by votes asc. So last one has most votes among safe.
+                          if (data.safe.length > 0) {
+                              victimId = data.safe[data.safe.length - 1];
+                          } else {
+                              newLogs.push("Nessun altro da eliminare! Eliminazione annullata.");
+                              victimId = null;
+                          }
+                      } else {
+                          victimId = runnerUpId;
+                      }
+
+                      if (victimId) {
+                         newLogs.push(`Il secondo più votato, ${lobby.players.find(p => p.uid === victimId).name}, viene eliminato!`);
                       }
                   }
 
-                  if (isRedemptionEpisode) {
-                      updates = {
-                        players: updatedPlayers,
-                        rankings: arrayUnion({ 
-                            name: victim.name, 
-                            team: victim.team || "Merge", 
-                            round: lobby.round, 
-                            season: currentSeason.name,
-                            immunities: victim.immunityWins || 0 
-                        }),
-                        phase: 'redemption',
-                        redemptionData: { active: true, stage: 'selection', candidates: [], rolls: {} },
-                        round: nextRound,
-                        votes: {},
-                        immunity: [],
-                        diceRoll: null,
-                        losingTeam: null,
-                        ceremonyData: null,
-                        challengeData: null,
-                        logs: arrayUnion(`${victim.name} è stato eliminato!`, `--- EPISODIO SPECIALE: REDEMPTION! ---`)
-                      };
+                  if (victimId) {
+                      const victim = lobby.players.find(p => p.uid === victimId);
+                      const updatedPlayers = lobby.players.map(p => p.uid === victimId ? { ...p, status: 'eliminated' } : p);
+                      
+                      // LOGICA REDEMPTION CHECK
+                      const nextRound = lobby.round + 1;
+                      const redemptionConfig = lobby.config.redemption;
+                      let isRedemptionEpisode = false;
+                      
+                      if (redemptionConfig && redemptionConfig.enabled && redemptionConfig.episodes) {
+                          if (Array.isArray(redemptionConfig.episodes)) {
+                               isRedemptionEpisode = redemptionConfig.episodes.includes(nextRound);
+                          }
+                      }
+
+                      if (isRedemptionEpisode) {
+                          updates = {
+                            ...updates,
+                            players: updatedPlayers,
+                            rankings: arrayUnion({ 
+                                name: victim.name, 
+                                team: victim.team || "Merge", 
+                                round: lobby.round, 
+                                season: currentSeason.name,
+                                immunities: victim.immunityWins || 0 
+                            }),
+                            phase: 'redemption',
+                            redemptionData: { active: true, stage: 'selection', candidates: [], rolls: {} },
+                            round: nextRound,
+                            votes: {},
+                            immunity: [],
+                            diceRoll: null,
+                            losingTeam: null,
+                            ceremonyData: null,
+                            challengeData: null,
+                            logs: arrayUnion(...newLogs, `${victim.name} è stato eliminato!`, `--- EPISODIO SPECIALE: REDEMPTION! ---`)
+                          };
+                      } else {
+                          updates = {
+                            ...updates,
+                            players: updatedPlayers,
+                            rankings: arrayUnion({ 
+                                name: victim.name, 
+                                team: victim.team || "Merge", 
+                                round: lobby.round, 
+                                season: currentSeason.name,
+                                immunities: victim.immunityWins || 0 
+                            }),
+                            phase: 'episode_start',
+                            round: nextRound,
+                            votes: {},
+                            immunity: [],
+                            diceRoll: null,
+                            losingTeam: null,
+                            ceremonyData: null,
+                            challengeData: null,
+                            logs: arrayUnion(...newLogs, `${victim.name} è stato eliminato!`)
+                          };
+                      }
                   } else {
-                      updates = {
-                        players: updatedPlayers,
-                        rankings: arrayUnion({ 
-                            name: victim.name, 
-                            team: victim.team || "Merge", 
-                            round: lobby.round, 
-                            season: currentSeason.name,
-                            immunities: victim.immunityWins || 0 
-                        }),
-                        phase: 'episode_start',
-                        round: nextRound,
-                        votes: {},
-                        immunity: [],
-                        diceRoll: null,
-                        losingTeam: null,
-                        ceremonyData: null,
-                        challengeData: null,
-                        logs: arrayUnion(`${victim.name} è stato eliminato!`)
+                      // IDOL SAVED EVERYONE (Rare)
+                       updates = {
+                            ...updates,
+                            phase: 'episode_start',
+                            round: lobby.round + 1,
+                            votes: {},
+                            immunity: [],
+                            diceRoll: null,
+                            losingTeam: null,
+                            ceremonyData: null,
+                            challengeData: null,
+                            logs: arrayUnion(...newLogs)
                       };
                   }
               }
@@ -1218,18 +1373,19 @@
                   winner = fd.p1Score >= 3 ? p1 : p2;
                   
                   const loser = fd.p1Score >= 3 ? p2 : p1;
-                  updates.rankings = arrayUnion({ 
+                  const loserEntry = { 
                       name: loser.name, 
                       team: "FINALIST", 
                       round: "FINALE", 
                       season: currentSeason.name,
                       immunities: loser.immunityWins || 0
-                  });
+                  };
                   
                   if (lobby.currentSeasonIndex < lobby.config.numSeasons - 1) {
                      updates.phase = 'season_setup'; 
                      updates.seasonWinners = arrayUnion(winner.name);
                      updates.logs = arrayUnion(`${winner.name} VINCE LA STAGIONE! Preparazione Stagione Successiva.`);
+                     updates.rankings = arrayUnion(loserEntry);
                      
                      const maxReturning = lobby.players.length;
                      const humanCount = lobby.players.filter(p => !p.isBot).length;
@@ -1242,13 +1398,15 @@
                   } else {
                      updates.phase = 'game_over';
                      updates.seasonWinners = arrayUnion(winner.name);
-                     updates.rankings = arrayUnion({ 
+                     const winnerEntry = { 
                          name: winner.name, 
                          team: "WINNER", 
                          round: "WINNER", 
                          season: currentSeason.name,
                          immunities: winner.immunityWins || 0 
-                     }); 
+                     };
+                     // FIX: Add both entries to rankings
+                     updates.rankings = arrayUnion(loserEntry, winnerEntry); 
                      updates.logs = arrayUnion(`GIOCO FINITO!`);
                   }
               }
@@ -1483,6 +1641,7 @@
                <div className="flex-1 flex flex-col relative z-0 overflow-hidden">
                   <div className="h-14 bg-slate-800/90 flex items-center justify-between px-4 z-20 border-b border-white/10">
                      <div className="font-bold italic text-white flex items-center gap-2">
+                        {lobby.phase === 'idol_hunt' && "CACCIA ALL'IDOLO"}
                         {lobby.phase === 'challenge' && "SFIDA IN CORSO"}
                         {lobby.phase === 'social' && "SOCIALIZZAZIONE"}
                         {lobby.phase === 'voting' && "CABINA ELETTORALE"}
@@ -1508,17 +1667,19 @@
                         {isHost && lobby.phase !== 'final_showdown' && lobby.phase !== 'season_setup' && lobby.phase !== 'redemption' && (
                             <button 
                                 onClick={advanceGame} 
-                                disabled={(lobby.phase === 'voting' && pendingVotesCount > 0) || (lobby.phase === 'social' && pendingReadyCount > 0)}
-                                className={`${((lobby.phase === 'voting' && pendingVotesCount > 0) || (lobby.phase === 'social' && pendingReadyCount > 0)) ? 'bg-slate-600 text-slate-400 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-400 text-black'} font-black px-4 py-1 rounded shadow text-sm flex items-center gap-2 transition-all`}
+                                disabled={(lobby.phase === 'voting' && pendingVotesCount > 0) || (lobby.phase === 'social' && pendingReadyCount > 0) || (lobby.phase === 'idol_hunt' && lobby.idolData.stage === 'selection')}
+                                className={`${((lobby.phase === 'voting' && pendingVotesCount > 0) || (lobby.phase === 'social' && pendingReadyCount > 0) || (lobby.phase === 'idol_hunt' && lobby.idolData.stage === 'selection')) ? 'bg-slate-600 text-slate-400 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-400 text-black'} font-black px-4 py-1 rounded shadow text-sm flex items-center gap-2 transition-all`}
                             >
                             {lobby.phase === 'voting' && pendingVotesCount > 0 
                                 ? `ATTESA VOTI (UMANI: ${pendingVotesCount})` 
                                 : lobby.phase === 'social' && pendingReadyCount > 0
                                     ? `ATTESA GIOCATORI (${pendingReadyCount})`
-                                    : lobby.phase === 'ceremony' 
-                                        ? (lobby.ceremonyData?.finalReveal && !lobby.ceremonyData?.tieMatch ? 'FINISCI' : lobby.ceremonyData?.tieMatch ? 'SPAREGGIO' : 'RIVELA') 
-                                        : 'AVANTI'} 
-                            {!(lobby.phase === 'voting' && pendingVotesCount > 0) && !(lobby.phase === 'social' && pendingReadyCount > 0) && <ArrowRight size={16} />}
+                                    : lobby.phase === 'idol_hunt' && lobby.idolData.stage === 'selection'
+                                        ? 'TUTTI DEVONO SCEGLIERE'
+                                        : lobby.phase === 'ceremony' 
+                                            ? (lobby.ceremonyData?.finalReveal && !lobby.ceremonyData?.tieMatch ? 'FINISCI' : lobby.ceremonyData?.tieMatch ? 'SPAREGGIO' : 'RIVELA') 
+                                            : 'AVANTI'} 
+                            {!(lobby.phase === 'voting' && pendingVotesCount > 0) && !(lobby.phase === 'social' && pendingReadyCount > 0) && !(lobby.phase === 'idol_hunt' && lobby.idolData.stage === 'selection') && <ArrowRight size={16} />}
                             </button>
                         )}
                      </div>
@@ -1526,6 +1687,78 @@
 
                   <div className="flex-1 overflow-y-auto p-4 relative">
                      
+                     {/* --- IDOL HUNT VIEW --- */}
+                     {lobby.phase === 'idol_hunt' && lobby.idolData && (
+                         <div className="flex flex-col items-center justify-center min-h-[80vh]">
+                            <h2 className="text-4xl font-black text-yellow-400 mb-2 uppercase drop-shadow-lg">CACCIA AL TESORO</h2>
+                            <p className="text-slate-300 mb-8 max-w-xl text-center">
+                                Una di queste casse contiene l'<strong>Idolo dell'Immunità</strong>. Se lo trovi, puoi usarlo per salvarti se vieni eliminato! Scegline una.
+                            </p>
+                            
+                            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
+                                {lobby.idolData.crates.map(c => {
+                                    const isMine = c.owner === user.uid;
+                                    const isTaken = c.owner !== null;
+                                    const isRevealed = lobby.idolData.stage === 'reveal';
+                                    const hasIdol = c.id === lobby.idolData.luckyIndex;
+                                    const ownerName = isTaken ? lobby.players.find(p => p.uid === c.owner)?.name : "";
+
+                                    return (
+                                        <button 
+                                            key={c.id} 
+                                            onClick={() => claimCrate(c.id)}
+                                            disabled={isTaken}
+                                            className={`
+                                                relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl flex flex-col items-center justify-center border-2 transition-all duration-500
+                                                ${isMine 
+                                                    ? 'border-yellow-400 bg-yellow-500/20 scale-110 shadow-[0_0_15px_rgba(250,204,21,0.5)]' 
+                                                    : isTaken 
+                                                        ? 'border-slate-700 bg-slate-800 opacity-60' 
+                                                        : 'border-slate-500 bg-slate-700 hover:bg-slate-600 hover:scale-105 cursor-pointer'}
+                                            `}
+                                        >
+                                            {isRevealed && isMine ? (
+                                                hasIdol ? (
+                                                    <Gem size={40} className="text-purple-400 animate-bounce drop-shadow-lg" />
+                                                ) : (
+                                                    <Skull size={40} className="text-slate-500" />
+                                                )
+                                            ) : (
+                                                <Package size={32} className={isMine ? 'text-yellow-400' : 'text-slate-400'} />
+                                            )}
+
+                                            {isTaken && !isRevealed && (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl">
+                                                    <Lock size={16} className="text-slate-400"/>
+                                                </div>
+                                            )}
+                                            
+                                            {isRevealed && isMine && (
+                                                <div className={`absolute -bottom-6 text-[10px] font-bold ${hasIdol ? 'text-purple-400' : 'text-slate-500'}`}>
+                                                    {hasIdol ? "TROVATO!" : "VUOTO"}
+                                                </div>
+                                            )}
+                                            
+                                            {isTaken && !isMine && (
+                                               <div className="absolute -bottom-4 text-[9px] text-slate-500 truncate w-full text-center px-1">
+                                                   {ownerName}
+                                               </div>
+                                            )}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+
+                            {lobby.idolData.stage === 'reveal' && (
+                                <div className="mt-8 text-center animate-in slide-in-from-bottom">
+                                    <div className="text-2xl font-bold mb-2">Tutte le casse sono state aperte!</div>
+                                    <p className="text-slate-400">Controlla la tua cassa. Se hai trovato l'idolo, è tuo segreto.</p>
+                                    {isHost && <div className="mt-4 text-yellow-400 animate-pulse">Premi AVANTI per iniziare l'Episodio 1</div>}
+                                </div>
+                            )}
+                         </div>
+                     )}
+
                      {/* --- REDEMPTION VIEW --- */}
                      {lobby.phase === 'redemption' && lobby.redemptionData && (
                          <div className="flex flex-col items-center justify-center min-h-full">

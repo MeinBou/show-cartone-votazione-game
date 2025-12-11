@@ -56,7 +56,7 @@
         import { 
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
           Trophy, Crown, UserPlus, Shield, Swords, Flame, 
-          AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award
+          AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle
         } from 'lucide-react';
 
         // --- TUE CHIAVI FIREBASE INSERITE ---
@@ -244,13 +244,15 @@
                 team: null,
                 relationships: {},
                 alliances: [],
-                diceRoll: null
+                diceRoll: null,
+                immunityWins: 0 
               }],
               round: 0,
               phase: 'setup',
               logs: [`Lobby creata da ${nickname}. Codice: ${code}`],
               chat: [], 
               votes: {},
+              readyPlayers: [], // Nuovo campo per la fase social
               immunity: [],
               losingTeam: null,
               ceremonyData: null,
@@ -283,7 +285,8 @@
                 team: null,
                 relationships: {},
                 alliances: [],
-                diceRoll: null
+                diceRoll: null,
+                immunityWins: 0
               })
             });
             setCurrentLobbyId(lobbyId);
@@ -516,7 +519,8 @@
                 team: null,
                 relationships: {},
                 alliances: [],
-                diceRoll: null
+                diceRoll: null,
+                immunityWins: 0 
               });
             }
 
@@ -632,12 +636,22 @@
                      if (r > maxRoll) { maxRoll = r; winners = [uid]; }
                      else if (r === maxRoll) { winners.push(uid); }
                  });
+
+                 // AGGIORNAMENTO IMMUNITÀ (NUOVA LOGICA)
+                 const updatedPlayers = lobby.players.map(p => {
+                     if (winners.includes(p.uid)) {
+                         return { ...p, immunityWins: (p.immunityWins || 0) + 1 };
+                     }
+                     return p;
+                 });
                  
                  updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                     players: updatedPlayers,
                      [`challengeData.stage`]: 'finished',
                      [`challengeData.winner`]: winners,
                      immunity: winners,
                      losingTeam: "MERGE",
+                     readyPlayers: [], // Reset ready players for social
                      phase: 'social'
                  });
                  return;
@@ -727,6 +741,12 @@
               });
           };
 
+          const toggleReady = async () => {
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                  readyPlayers: arrayUnion(user.uid)
+              });
+          };
+
 
           const startNextSeason = async (newConfig) => {
             if (!isHost) return;
@@ -749,7 +769,8 @@
                 team: null, 
                 relationships: {}, 
                 alliances: [], 
-                diceRoll: null
+                diceRoll: null,
+                immunityWins: 0 
             }));
 
             const numTeams = newConfig.numTeams;
@@ -823,6 +844,7 @@
                  updates = {
                     immunity: immuneIds,
                     losingTeam: losingTeam,
+                    readyPlayers: [], // Reset per social
                     phase: 'social',
                     logs: arrayUnion(...newLogs)
                  };
@@ -907,7 +929,13 @@
                   
                   updates = {
                     players: updatedPlayers,
-                    rankings: arrayUnion({ name: victim.name, team: victim.team || "Merge", round: lobby.round, season: currentSeason.name }),
+                    rankings: arrayUnion({ 
+                        name: victim.name, 
+                        team: victim.team || "Merge", 
+                        round: lobby.round, 
+                        season: currentSeason.name,
+                        immunities: victim.immunityWins || 0 
+                    }),
                     phase: 'episode_start',
                     round: lobby.round + 1,
                     votes: {},
@@ -962,7 +990,13 @@
                   winner = fd.p1Score >= 3 ? p1 : p2;
                   
                   const loser = fd.p1Score >= 3 ? p2 : p1;
-                  updates.rankings = arrayUnion({ name: loser.name, team: "FINALIST", round: "FINALE", season: currentSeason.name });
+                  updates.rankings = arrayUnion({ 
+                      name: loser.name, 
+                      team: "FINALIST", 
+                      round: "FINALE", 
+                      season: currentSeason.name,
+                      immunities: loser.immunityWins || 0
+                  });
                   
                   if (lobby.currentSeasonIndex < lobby.config.numSeasons - 1) {
                      updates.phase = 'season_setup'; 
@@ -979,7 +1013,13 @@
                   } else {
                      updates.phase = 'game_over';
                      updates.seasonWinners = arrayUnion(winner.name);
-                     updates.rankings = arrayUnion({ name: winner.name, team: "WINNER", round: "WINNER", season: currentSeason.name }); 
+                     updates.rankings = arrayUnion({ 
+                         name: winner.name, 
+                         team: "WINNER", 
+                         round: "WINNER", 
+                         season: currentSeason.name,
+                         immunities: winner.immunityWins || 0 
+                     }); 
                      updates.logs = arrayUnion(`GIOCO FINITO!`);
                   }
               }
@@ -1141,6 +1181,23 @@
              return groups;
           }, [activePlayers, isMerge, lobby.config.numTeams]);
 
+          // --- LOGICA ATTESA VOTI ---
+          const pendingVotesCount = useMemo(() => {
+              if (lobby.phase !== 'voting') return 0;
+              const voters = isMerge 
+                  ? activePlayers 
+                  : activePlayers.filter(p => p.team === lobby.losingTeam);
+              return voters.filter(p => !lobby.votes?.[p.uid]).length;
+          }, [lobby.phase, lobby.votes, isMerge, activePlayers, lobby.losingTeam]);
+
+          // --- LOGICA ATTESA SOCIAL ---
+          const pendingReadyCount = useMemo(() => {
+              if (lobby.phase !== 'social') return 0;
+              const humans = activePlayers.filter(p => !p.isBot);
+              const ready = lobby.readyPlayers || [];
+              return humans.filter(h => !ready.includes(h.uid)).length;
+          }, [lobby.phase, lobby.readyPlayers, activePlayers]);
+
           return (
             <div className="flex h-screen bg-cover bg-center text-white overflow-hidden font-sans" style={{ backgroundImage: `url('${currentSeason.bg}')` }}>
                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
@@ -1196,11 +1253,37 @@
                         {lobby.phase === 'final_showdown' && "GRAN FINALE"}
                         {lobby.phase === 'season_setup' && "SETUP STAGIONE"}
                      </div>
-                     {isHost && lobby.phase !== 'final_showdown' && lobby.phase !== 'season_setup' && (
-                        <button onClick={advanceGame} className="bg-yellow-500 hover:bg-yellow-400 text-black font-black px-4 py-1 rounded shadow text-sm flex items-center gap-2">
-                           {lobby.phase === 'ceremony' ? (lobby.ceremonyData?.finalReveal && !lobby.ceremonyData?.tieMatch ? 'FINISCI' : lobby.ceremonyData?.tieMatch ? 'SPAREGGIO' : 'RIVELA') : 'AVANTI'} <ArrowRight size={16} />
-                        </button>
-                     )}
+                     
+                     <div className="flex items-center gap-4">
+                        {lobby.phase === 'social' && myPlayer.status === 'active' && (
+                            (lobby.readyPlayers || []).includes(user.uid) ? (
+                                <div className="bg-green-600/50 text-green-200 px-4 py-1 rounded font-bold text-sm flex items-center gap-2 border border-green-500">
+                                    <CheckCircle size={16}/> HAI FINITO
+                                </div>
+                            ) : (
+                                <button onClick={toggleReady} className="bg-green-600 hover:bg-green-500 text-white font-black px-4 py-1 rounded shadow text-sm flex items-center gap-2 animate-pulse">
+                                    <CheckCircle size={16}/> HO FINITO
+                                </button>
+                            )
+                        )}
+
+                        {isHost && lobby.phase !== 'final_showdown' && lobby.phase !== 'season_setup' && (
+                            <button 
+                                onClick={advanceGame} 
+                                disabled={(lobby.phase === 'voting' && pendingVotesCount > 0) || (lobby.phase === 'social' && pendingReadyCount > 0)}
+                                className={`${((lobby.phase === 'voting' && pendingVotesCount > 0) || (lobby.phase === 'social' && pendingReadyCount > 0)) ? 'bg-slate-600 text-slate-400 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-400 text-black'} font-black px-4 py-1 rounded shadow text-sm flex items-center gap-2 transition-all`}
+                            >
+                            {lobby.phase === 'voting' && pendingVotesCount > 0 
+                                ? `ATTESA VOTI (${pendingVotesCount})` 
+                                : lobby.phase === 'social' && pendingReadyCount > 0
+                                    ? `ATTESA GIOCATORI (${pendingReadyCount})`
+                                    : lobby.phase === 'ceremony' 
+                                        ? (lobby.ceremonyData?.finalReveal && !lobby.ceremonyData?.tieMatch ? 'FINISCI' : lobby.ceremonyData?.tieMatch ? 'SPAREGGIO' : 'RIVELA') 
+                                        : 'AVANTI'} 
+                            {!(lobby.phase === 'voting' && pendingVotesCount > 0) && !(lobby.phase === 'social' && pendingReadyCount > 0) && <ArrowRight size={16} />}
+                            </button>
+                        )}
+                     </div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-4 relative">
@@ -1442,7 +1525,14 @@
 
                                                      <div>
                                                          <div className={`font-bold text-lg ${i === 0 ? 'text-yellow-100' : 'text-white'}`}>{r.name}</div>
-                                                         <div className="text-xs text-slate-400 uppercase">{r.season} • {r.team}</div>
+                                                         <div className="text-xs text-slate-400 uppercase flex items-center gap-2">
+                                                            <span>{r.season} • {r.team}</span>
+                                                            {r.immunities > 0 && (
+                                                                <span className="flex items-center gap-1 text-yellow-400 ml-1" title="Immunità vinte nel Merge">
+                                                                    <Shield size={12} fill="currentColor" /> {r.immunities}
+                                                                </span>
+                                                            )}
+                                                         </div>
                                                      </div>
                                                  </div>
                                                  <div className="font-mono text-sm text-slate-500 bg-slate-900 px-2 py-1 rounded">
@@ -1560,6 +1650,7 @@
                                                const isImmune = (lobby.immunity || []).includes(p.uid);
                                                const rel = p.relationships[user.uid] || 0;
                                                const isAlly = Array.isArray(p.alliances) && p.alliances.includes(user.uid);
+                                               const isReady = (lobby.readyPlayers || []).includes(p.uid);
 
                                                return (
                                                    <div 
@@ -1571,6 +1662,14 @@
                                                            <img src={p.character.img} className="w-full h-full object-cover" />
                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
                                                            {isImmune && <Shield size={16} className="absolute top-1 right-1 text-yellow-400 fill-yellow-400 drop-shadow-md" />}
+                                                           
+                                                           {/* INDICATORE PRONTO */}
+                                                           {lobby.phase === 'social' && !p.isBot && isReady && (
+                                                               <div className="absolute top-1 left-1 bg-green-500 rounded-full p-0.5" title="Pronto">
+                                                                    <CheckCircle size={14} className="text-white"/>
+                                                               </div>
+                                                           )}
+
                                                            {!isMe && (
                                                                <div className="absolute top-1 left-1 flex flex-col gap-1">
                                                                    {rel !== 0 && (

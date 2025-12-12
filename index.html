@@ -107,7 +107,7 @@
         
         const SEASON_CONFIG = [
           { name: "L'Isola", bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073&auto=format&fit=crop", theme: "Spiaggia" },
-          { name: "Azione", bg: "https://cdnb.artstation.com/p/assets/images/images/069/346/373/large/kit-untitled-artwork-52.jpg?1699919305", theme: "Cinema" },
+          { name: "Azione", bg: "https://images.unsplash.com/photo-1478720568477-152d9b164e63?q=80&w=2000&auto=format&fit=crop", theme: "Cinema" },
           { name: "World Tour", bg: "https://images.unsplash.com/photo-1559586616-361e18714958?q=80&w=2070&auto=format&fit=crop", theme: "Aereo" }
         ];
 
@@ -115,6 +115,9 @@
           { name: "Lord Farquaad", img: "https://i.pinimg.com/736x/35/93/ac/3593acb0b8f9d75704f5a0778c693e73.jpg" },
           { name: "Marinette", img: "https://i.pinimg.com/736x/b8/74/55/b87455575cd069609007a639c9490293.jpg" },
           { name: "Adrien", img: "https://i.pinimg.com/1200x/5c/2d/c7/5c2dc740ed2fe906b6afaf1320bf4273.jpg" },
+		  { name: "Alya", img: "https://i.pinimg.com/736x/3e/3b/99/3e3b99fc26e6b2cb8bf7359c53acca24.jpg" },
+		  { name: "Luka", img: "https://i.pinimg.com/736x/16/40/f3/1640f3c6c2b14e00c110316e02e86c7f.jpg" },
+		  { name: "Kagami", img: "https://i.pinimg.com/736x/56/e2/ad/56e2adc6421c613a6d00b393abd1a6c1.jpg" },
           { name: "Re Julien", img: "https://i.pinimg.com/736x/1e/17/19/1e17194ef5b383e4202fbb4875cfbd81.jpg" },
           { name: "Skipper", img: "https://i.pinimg.com/736x/e6/f0/5b/e6f05b20dda962344721db983c882679.jpg" },
           { name: "Gwen", img: "https://i.pinimg.com/1200x/59/d7/15/59d71578cd5f889ae898bbc83dda29dc.jpg" },
@@ -220,6 +223,7 @@
 		  { name: "Simba", img: "https://i.pinimg.com/736x/b1/90/89/b19089d874786ae283c4ba7f9ebed795.jpg" },
 		  { name: "Aurora", img: "https://i.pinimg.com/736x/b1/75/fb/b175fbb3b147ea7a9f74ef16b7e4abd3.jpg" },
 		  { name: "Kuzco", img: "https://i.pinimg.com/736x/75/cf/32/75cf32d90c87209bcf2c3e77be26117b.jpg" },
+		  { name: "Kratos", img: "https://i.pinimg.com/1200x/c7/92/1e/c7921e20927ce5aea55d465a3685a055.jpg" },
 		  { name: "Ben 10", img: "https://i.pinimg.com/736x/b3/c8/eb/b3c8ebedc4123fa33f6e72ff2deff109.jpg" },
           { name: "Gwen Tennyson", img: "https://i.pinimg.com/736x/f7/59/57/f75957bd5bad8195e2322e58de3f8119.jpg" }
         ];
@@ -1479,7 +1483,7 @@
                     ceremonyData: { 
                         safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
                         isDoubleElimination: isDoubleElimination, // Nuovo campo
-                        eliminatedSecond: eliminated.length > 1 ? eliminated[1] : null, // Secondo eliminato
+                        eliminatedSecond: (eliminated && eliminated.length > 1) ? eliminated[1] : null, // Secondo eliminato
                         tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
                     },
                     logs: arrayUnion("--- CERIMONIA DI ELIMINAZIONE ---", ...newLogs)

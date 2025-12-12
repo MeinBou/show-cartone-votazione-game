@@ -67,7 +67,7 @@
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
           Trophy, Crown, UserPlus, Shield, Swords, Flame, 
           AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle, Undo2,
-          Package, Gem, Lock, Unlock, Target, Users2
+          Package, Gem, Lock, Unlock, Target, Users2, AlertOctagon
         } from 'lucide-react';
 
         // --- TUE CHIAVI FIREBASE INSERITE ---
@@ -611,7 +611,7 @@
                                     <input 
                                         type="number" 
                                         min="1" 
-                                        max="8" 
+                                        max="3" 
                                         value={config.redemption.count}
                                         onChange={e => setConfig({...config, redemption: { ...config.redemption, count: parseInt(e.target.value) }})}
                                         className="w-full bg-slate-800 rounded px-2 py-1 text-white"
@@ -863,6 +863,89 @@
             // --- CALCOLO VINCITORI A FINE GIRI ---
             if (rollingIndex >= rollPlayers.length) {
                  
+                 // --- LOGICA SUDDEN DEATH (ELIMINAZIONE DIRETTA) ---
+                 if (lobby.challengeData.type === 'sudden_death') {
+                    let minRoll = 11;
+                    let losers = [];
+                    Object.entries(rolls).forEach(([uid, r]) => {
+                        if (r < minRoll) { minRoll = r; losers = [uid]; }
+                        else if (r === minRoll) { losers.push(uid); }
+                    });
+
+                    if (losers.length > 1) {
+                         // Tie for loser
+                         const loserNames = losers.map(w => lobby.players.find(p => p.uid === w)?.name).join(", ");
+                         updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+                             [`challengeData.players`]: losers,
+                             [`challengeData.rollingIndex`]: 0,
+                             [`challengeData.rolls`]: {},
+                             logs: arrayUnion(`PAREGGIO PER L'ELIMINAZIONE (${minRoll})! Spareggio tra: ${loserNames}`)
+                         });
+                    } else {
+                         // Eliminate loser
+                         const victimId = losers[0];
+                         const victim = lobby.players.find(p => p.uid === victimId);
+                         
+                         const updatedPlayers = lobby.players.map(p => p.uid === victimId ? { ...p, status: 'eliminated' } : p);
+                         
+                         const rankingEntry = { 
+                              name: victim.name, 
+                              team: victim.team || "Merge", 
+                              round: lobby.round, 
+                              season: currentSeason.name,
+                              immunities: victim.immunityWins || 0,
+                              votes: victim.totalVotesReceived || 0
+                         };
+
+                         // Verifica Redemption
+                         const nextRound = lobby.round + 1;
+                         const redemptionConfig = lobby.config.redemption;
+                         let isRedemptionEpisode = false;
+                         if (redemptionConfig && redemptionConfig.enabled && redemptionConfig.episodes) {
+                              if (Array.isArray(redemptionConfig.episodes)) {
+                                   isRedemptionEpisode = redemptionConfig.episodes.includes(nextRound);
+                              }
+                         }
+
+                         let updates = {
+                             players: updatedPlayers,
+                             rankings: arrayUnion(rankingEntry),
+                             logs: arrayUnion(`${victim.name} ha fatto il punteggio più basso (${minRoll}) ed è ELIMINATO DIRETTAMENTE!`)
+                         };
+
+                         if (isRedemptionEpisode) {
+                              updates = {
+                                  ...updates,
+                                  phase: 'redemption',
+                                  redemptionData: { active: true, stage: 'selection', candidates: [], rolls: {} },
+                                  round: nextRound,
+                                  votes: {},
+                                  immunity: [],
+                                  diceRoll: null,
+                                  losingTeam: null,
+                                  ceremonyData: null,
+                                  challengeData: null,
+                                  logs: arrayUnion(`${victim.name} è stato eliminato!`, `--- EPISODIO SPECIALE: REDEMPTION! ---`)
+                              };
+                         } else {
+                              updates = {
+                                  ...updates,
+                                  phase: 'episode_start', // Torna all'inizio episodio
+                                  round: nextRound,
+                                  votes: {},
+                                  immunity: [],
+                                  diceRoll: null,
+                                  losingTeam: null,
+                                  ceremonyData: null,
+                                  challengeData: null
+                              };
+                         }
+
+                         updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
+                    }
+                    return;
+                 }
+
                  // --- LOGICA SFIDA A SQUADRE (NEW) ---
                  if (lobby.challengeData.type === 'team') {
                      const teamScores = { A: 0, B: 0 };
@@ -1245,11 +1328,24 @@
                   updates = { phase: 'challenge', logs: arrayUnion(`--- SFIDA EPISODIO ${lobby.round} ---`) };
                   
                   if (isMerge) {
-                      // 8% CHANCE OF TEAM IMMUNITY IN MERGE
-                      const isTeamChallenge = Math.random() < 0.08; 
-
-                      if (isTeamChallenge) {
-                          // RANDOM TEAM SPLIT
+                      const rand = Math.random();
+                      
+                      if (rand < 0.06) {
+                           // --- SUDDEN DEATH (6%) ---
+                           const rollers = activePlayers.map(p => p.uid);
+                           updates.challengeData = {
+                               type: 'sudden_death',
+                               players: rollers,
+                               rollingIndex: 0,
+                               rolls: {},
+                               stage: 'rolling',
+                               winner: null 
+                           };
+                           newLogs.push("Chris: COLPO DI SCENA! Sfida ad Eliminazione Diretta!");
+                           newLogs.push("Chi fa il numero più basso TORNA A CASA. Niente votazioni.");
+                      
+                      } else if (rand < 0.14) { 
+                          // --- TEAM CHALLENGE (8%) ---
                           const shuffled = [...activePlayers].sort(() => Math.random() - 0.5);
                           const mid = Math.ceil(shuffled.length / 2);
                           const teamA = shuffled.slice(0, mid).map(p => p.uid);
@@ -1260,20 +1356,19 @@
                           teamB.forEach(uid => tempTeams[uid] = 'B');
 
                           updates.challengeData = {
-                              type: 'team', // Special type
+                              type: 'team', 
                               teams: tempTeams,
-                              players: [...teamA, ...teamB], // All roll
+                              players: [...teamA, ...teamB], 
                               rollingIndex: 0,
                               rolls: {},
                               stage: 'rolling',
                               winner: null
                           };
-                          
                           newLogs.push("Chris: Oggi sfida speciale! Vi dividerò in due squadre casuali.");
                           newLogs.push("La squadra che totalizza il punteggio più alto vince l'immunità!");
 
                       } else {
-                          // STANDARD INDIVIDUAL
+                          // --- STANDARD INDIVIDUAL ---
                           const rollers = activePlayers.map(p => p.uid);
                           updates.challengeData = {
                               type: 'individual',
@@ -1290,23 +1385,7 @@
                       updates.challengeData = {
                          type: 'standard', // Pre-merge standard
                          players: rollers,
-                         // Logic handled in resolve phase (sum team scores or highest roll wins for team?) 
-                         // Note: In previous pre-merge code we just picked a random winner. 
-                         // Let's keep pre-merge simple/random as before to not break existing flow, 
-                         // or we can implement actual rolling for pre-merge too?
-                         // The existing code for pre-merge just skips to 'social' with random winner.
-                         // So we don't set challengeData if not Merge.
                       };
-                      // Actually, let's keep consistent with previous logic:
-                      // If NOT merge, we skip 'challenge' rolling phase and go straight to resolving in 'social' setup?
-                      // Wait, previous code:
-                      /* else if (lobby.phase === 'challenge') {
-                          if (!isMerge) {
-                             // Randomly picks winner immediately
-                          }
-                        }
-                      */
-                      // So we just transition to 'challenge' phase, and the next click handles it.
                   }
               }
             }
@@ -1367,7 +1446,7 @@
                     ceremonyData: { 
                         safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
                         isDoubleElimination: isDoubleElimination, // Nuovo campo
-                        eliminatedSecond: (Array.isArray(eliminated) && eliminated.length > 1) ? eliminated[1] : null, // FIX: Safe check for eliminated
+                        eliminatedSecond: eliminated.length > 1 ? eliminated[1] : null, // Secondo eliminato
                         tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
                     },
                     logs: arrayUnion("--- CERIMONIA DI ELIMINAZIONE ---", ...newLogs)
@@ -2181,8 +2260,11 @@
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
                             {lobby.challengeData.stage === 'rolling' ? (
                                 <div className="text-center animate-pulse w-full max-w-4xl">
-                                    <h2 className="text-3xl font-bold mb-4 uppercase">
-                                        {lobby.challengeData.type === 'team' ? "SFIDA A SQUADRE (50% IMMUNITÀ)" : "SFIDA INDIVIDUALE"}
+                                    <h2 className="text-3xl font-bold mb-4 uppercase flex items-center justify-center gap-3">
+                                        {lobby.challengeData.type === 'sudden_death' && <AlertOctagon size={40} className="text-red-600"/>}
+                                        {lobby.challengeData.type === 'sudden_death' && <span className="text-red-500 font-black">ELIMINAZIONE DIRETTA (LOWEST ROLL)</span>}
+                                        {lobby.challengeData.type === 'team' && "SFIDA A SQUADRE (50% IMMUNITÀ)"}
+                                        {lobby.challengeData.type === 'individual' && "SFIDA INDIVIDUALE"}
                                     </h2>
                                     
                                     <div className="mb-8">
@@ -2229,13 +2311,13 @@
                                                 })}
                                             </div>
                                         ) : (
-                                            /* INDIVIDUAL VIEW */
+                                            /* INDIVIDUAL / SUDDEN DEATH VIEW */
                                             Object.entries(lobby.challengeData.rolls).map(([uid, val]) => {
                                                 const p = lobby.players.find(pl => pl.uid === uid);
                                                 return (
-                                                    <div key={uid} className="bg-slate-800 p-4 rounded-xl flex flex-col items-center border border-slate-600 animate-in zoom-in">
+                                                    <div key={uid} className={`bg-slate-800 p-4 rounded-xl flex flex-col items-center border ${lobby.challengeData.type === 'sudden_death' ? 'border-red-500' : 'border-slate-600'} animate-in zoom-in`}>
                                                         <img src={p.character.img} className="w-12 h-12 rounded-full mb-2"/>
-                                                        <div className="text-3xl font-black">{val}</div>
+                                                        <div className={`text-3xl font-black ${lobby.challengeData.type === 'sudden_death' ? 'text-red-400' : 'text-white'}`}>{val}</div>
                                                     </div>
                                                 )
                                             })

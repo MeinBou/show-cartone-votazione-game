@@ -67,7 +67,7 @@
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
           Trophy, Crown, UserPlus, Shield, Swords, Flame, 
           AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle, Undo2,
-          Package, Gem, Lock, Unlock, Target, Users2, AlertOctagon
+          Package, Gem, Lock, Unlock, Target, Users2, AlertOctagon, Shuffle
         } from 'lucide-react';
 
         // --- TUE CHIAVI FIREBASE INSERITE ---
@@ -107,7 +107,7 @@
         
         const SEASON_CONFIG = [
           { name: "L'Isola", bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073&auto=format&fit=crop", theme: "Spiaggia" },
-          { name: "Azione", bg: "https://images.unsplash.com/photo-1478720568477-152d9b164e63?q=80&w=2000&auto=format&fit=crop", theme: "Cinema" },
+          { name: "Azione", bg: "https://cdnb.artstation.com/p/assets/images/images/069/346/373/large/kit-untitled-artwork-52.jpg?1699919305", theme: "Cinema" },
           { name: "World Tour", bg: "https://images.unsplash.com/photo-1559586616-361e18714958?q=80&w=2070&auto=format&fit=crop", theme: "Aereo" }
         ];
 
@@ -1381,6 +1381,39 @@
                       }
                   } else {
                       // PRE-MERGE (Standard Teams)
+                      
+                      // --- 10% CHANCE TEAM SWAP (NEW) ---
+                      if (Math.random() < 0.10) {
+                          const teamsMap = {};
+                          // Raggruppa i giocatori attivi per team
+                          activePlayers.forEach(p => {
+                              if (!teamsMap[p.team]) teamsMap[p.team] = [];
+                              teamsMap[p.team].push(p);
+                          });
+                          
+                          const teamNames = Object.keys(teamsMap);
+                          if (teamNames.length >= 2) {
+                              // Ordina team per dimensione (Decrescente)
+                              teamNames.sort((a, b) => teamsMap[b].length - teamsMap[a].length);
+                              
+                              const bigTeam = teamNames[0];
+                              const smallTeam = teamNames[teamNames.length - 1];
+                              
+                              // Esegui lo swap solo se il team grande ha più membri del piccolo
+                              if (teamsMap[bigTeam].length > teamsMap[smallTeam].length) {
+                                  const victim = teamsMap[bigTeam][Math.floor(Math.random() * teamsMap[bigTeam].length)];
+                                  
+                                  // Aggiorna la lista giocatori
+                                  const updatedPlayers = lobby.players.map(p => 
+                                      p.uid === victim.uid ? { ...p, team: smallTeam } : p
+                                  );
+                                  
+                                  updates.players = updatedPlayers;
+                                  newLogs.push(`COLPO DI SCENA! Chris: "${victim.name}, prendi le tue cose! Passi dai ${bigTeam} ai ${smallTeam}!"`);
+                              }
+                          }
+                      }
+
                       const rollers = activePlayers.map(p => p.uid);
                       updates.challengeData = {
                          type: 'standard', // Pre-merge standard

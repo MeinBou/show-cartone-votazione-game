@@ -107,7 +107,7 @@
         
         const SEASON_CONFIG = [
           { name: "L'Isola", bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073&auto=format&fit=crop", theme: "Spiaggia" },
-          { name: "Azione", bg: "https://images.unsplash.com/photo-1478720568477-152d9b164e63?q=80&w=2000&auto=format&fit=crop", theme: "Cinema" },
+          { name: "Azione", bg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRHA0Qhs3YuQ2N8cZ-Vp0s5FuDeC0x4zwNqg&s", theme: "Cinema" },
           { name: "World Tour", bg: "https://images.unsplash.com/photo-1559586616-361e18714958?q=80&w=2070&auto=format&fit=crop", theme: "Aereo" }
         ];
 
@@ -1461,6 +1461,7 @@
 
             else if (lobby.phase === 'voting') {
                 const isDoubleElimination = isMerge && Math.random() < 0.05; // 5% chance ONLY IF MERGE
+                const isOpenVote = Math.random() < 0.05; // 5% chance ALWAYS (Voti Palesi)
                 
                 const { safe, bottomTwo, eliminated, voteCounts, tie } = calculateCeremonyResults(lobby, lobby.votes, isMerge, isDoubleElimination);
                 
@@ -1477,12 +1478,27 @@
                    newLogs.push("!!! COLPO DI SCENA !!! Chris: 'Questa sera, per la prima volta, abbiamo una DOPPIA ELIMINAZIONE!'");
                 }
 
+                // Generazione mappa votanti se i voti sono palesi
+                let votersMap = {};
+                if (isOpenVote) {
+                     newLogs.push("!!! COLPO DI SCENA !!! Chris: 'Stasera i voti sono PALESI! Niente segreti!'");
+                     Object.entries(lobby.votes).forEach(([voterId, targetId]) => {
+                        const voter = lobby.players.find(p => p.uid === voterId);
+                        if(voter) {
+                            if(!votersMap[targetId]) votersMap[targetId] = [];
+                            votersMap[targetId].push(voter.name);
+                        }
+                     });
+                }
+
                 updates = { 
                     phase: 'ceremony', 
                     players: updatedPlayersWithVotes,
                     ceremonyData: { 
                         safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
                         isDoubleElimination: isDoubleElimination, // Nuovo campo
+                        isOpenVote: isOpenVote, // NEW: Flag voti palesi
+                        votersMap: votersMap,   // NEW: Mappa votanti
                         eliminatedSecond: (eliminated && eliminated.length > 1) ? eliminated[1] : null, // Secondo eliminato
                         tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
                     },
@@ -2603,6 +2619,7 @@
                                     <>
                                     <Flame size={64} className="text-orange-500 animate-pulse mb-4" />
                                     {lobby.ceremonyData.isDoubleElimination && <div className="text-3xl font-black text-red-500 mb-2">DOPPIA ELIMINAZIONE!</div>}
+                                    {lobby.ceremonyData.isOpenVote && <div className="text-xl font-black text-red-400 mb-2 bg-black/40 px-4 rounded animate-pulse">VOTI PALESI</div>}
                                     <h2 className="text-3xl font-black text-white mb-6">IL FUOCO DECIDE</h2>
                                     
                                     <div className="flex flex-wrap justify-center gap-2 mb-8 max-w-3xl">
@@ -2639,6 +2656,13 @@
                                                         <div className="font-mono text-yellow-400 font-bold mt-1 text-lg">
                                                             {showVotes ? `${votes} voti` : "?"}
                                                         </div>
+                                                        {/* VISUALIZZAZIONE NOMI VOTANTI */}
+                                                        {showVotes && lobby.ceremonyData.isOpenVote && lobby.ceremonyData.votersMap?.[uid] && (
+                                                            <div className="text-[10px] text-slate-300 max-w-[120px] text-center mt-1 bg-black/50 p-1 rounded animate-in zoom-in">
+                                                                <span className="text-red-400 font-bold">Votato da:</span><br/>
+                                                                {lobby.ceremonyData.votersMap[uid].join(", ")}
+                                                            </div>
+                                                        )}
                                                         {isEliminated && <div className="text-red-500 font-black text-2xl mt-2 rotate-12 border-4 border-red-500 px-4 rounded-xl bg-black">ELIMINATO</div>}
                                                     </div>
                                                 )

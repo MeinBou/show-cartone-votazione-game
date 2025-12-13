@@ -67,7 +67,7 @@
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
           Trophy, Crown, UserPlus, Shield, Swords, Flame, 
           AlertTriangle, ArrowRight, Dices, Send, X, Vote, ListOrdered, Coffee, ChevronDown, Award, CheckCircle, Undo2,
-          Package, Gem, Lock, Unlock, Target, Users2, AlertOctagon, Shuffle
+          Package, Gem, Lock, Unlock, Target, Users2, AlertOctagon, Shuffle, Gavel
         } from 'lucide-react';
 
         // --- TUE CHIAVI FIREBASE INSERITE ---
@@ -107,7 +107,7 @@
         
         const SEASON_CONFIG = [
           { name: "L'Isola", bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073&auto=format&fit=crop", theme: "Spiaggia" },
-          { name: "Azione", bg: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRHA0Qhs3YuQ2N8cZ-Vp0s5FuDeC0x4zwNqg&s", theme: "Cinema" },
+          { name: "Azione", bg: "https://images.unsplash.com/photo-1478720568477-152d9b164e63?q=80&w=2000&auto=format&fit=crop", theme: "Cinema" },
           { name: "World Tour", bg: "https://images.unsplash.com/photo-1559586616-361e18714958?q=80&w=2070&auto=format&fit=crop", theme: "Aereo" }
         ];
 
@@ -212,6 +212,8 @@
 		  { name: "Spongebob", img: "https://i.pinimg.com/originals/4c/74/21/4c742132b3f7018e49ae1901a2ab3e68.gif" },
 		  { name: "Patrick", img: "https://i.pinimg.com/736x/cc/45/b5/cc45b504e5bba418a3621d894a7693d6.jpg" },
 		  { name: "Squiddi", img: "https://i.pinimg.com/originals/bb/9a/08/bb9a082dd1a1a8f49200b8f5e5392d23.gif" },
+		  { name: "Mr Krab", img: "https://i.pinimg.com/1200x/74/9c/f5/749cf53dd48dbb440fcde8d958c7dbb1.jpg" },
+		  { name: "Plankton", img: "https://i.pinimg.com/736x/4c/27/4f/4c274f1e983ecd433672cfef1060872f.jpg" },
 		  { name: "Alvin", img: "https://i.pinimg.com/1200x/42/b1/da/42b1da0676938e04cfcd2d16ae13e067.jpg" },
 		  { name: "Poison Ivy", img: "https://i.pinimg.com/736x/72/f5/98/72f598d1ca69f3de7f38206b38d79066.jpg" },
           { name: "Sonic", img: "https://i.pinimg.com/1200x/4f/22/d2/4f22d2cd449a419b3859197438300dd2.jpg" },
@@ -224,6 +226,7 @@
 		  { name: "Aurora", img: "https://i.pinimg.com/736x/b1/75/fb/b175fbb3b147ea7a9f74ef16b7e4abd3.jpg" },
 		  { name: "Kuzco", img: "https://i.pinimg.com/736x/75/cf/32/75cf32d90c87209bcf2c3e77be26117b.jpg" },
 		  { name: "Kratos", img: "https://i.pinimg.com/1200x/c7/92/1e/c7921e20927ce5aea55d465a3685a055.jpg" },
+		  { name: "Ghostface", img: "https://i.pinimg.com/736x/a3/14/c4/a314c4596b6c929a375ff3355e2360ca.jpg" },
 		  { name: "Ben 10", img: "https://i.pinimg.com/736x/b3/c8/eb/b3c8ebedc4123fa33f6e72ff2deff109.jpg" },
           { name: "Gwen Tennyson", img: "https://i.pinimg.com/736x/f7/59/57/f75957bd5bad8195e2322e58de3f8119.jpg" }
         ];
@@ -1451,12 +1454,31 @@
             }
 
             else if (lobby.phase === 'social') {
-                const botVotes = calculateBotVotes(lobby, isMerge);
-                updates = {
-                    phase: 'voting',
-                    votes: botVotes,
-                    logs: arrayUnion("È TEMPO DI VOTARE!")
-                };
+                // --- 5% KILLER TWIST (SOLO MERGE) ---
+                const isKillerTwist = isMerge && Math.random() < 0.05 && (lobby.immunity || []).length === 1;
+
+                if (isKillerTwist) {
+                     const killerId = lobby.immunity[0];
+                     const killerName = lobby.players.find(p => p.uid === killerId)?.name;
+                     // Se il killer è un bot, calcola subito il suo voto
+                     const isKillerBot = lobby.players.find(p => p.uid === killerId)?.isBot;
+                     const botVotes = isKillerBot ? calculateBotVotes(lobby, isMerge, killerId) : {}; 
+
+                     updates = {
+                        phase: 'voting',
+                        votes: botVotes,
+                        twistData: { active: true, type: 'killer', killerId: killerId },
+                        logs: arrayUnion(`COLPO DI SCENA! ${killerName} ha vinto l'immunità e deciderà DA SOLO chi eliminare!`)
+                     };
+                } else {
+                    const botVotes = calculateBotVotes(lobby, isMerge);
+                    updates = {
+                        phase: 'voting',
+                        votes: botVotes,
+                        twistData: null, // Reset twist data
+                        logs: arrayUnion("È TEMPO DI VOTARE!")
+                    };
+                }
             }
 
             else if (lobby.phase === 'voting') {
@@ -1768,10 +1790,11 @@
               await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
           };
 
-          const calculateBotVotes = (lobbyState, isMerge) => {
+          const calculateBotVotes = (lobbyState, isMerge, killerId = null) => {
             const votes = {};
             const activeBots = lobbyState.players.filter(p => {
                 if (!p.isBot || p.status !== 'active') return false;
+                if (killerId && p.uid !== killerId) return false; // Se c'è un killer, vota solo lui
                 if (isMerge) return true;
                 return p.team === lobbyState.losingTeam;
             });
@@ -1935,6 +1958,11 @@
           const submitVote = async (targetId) => {
               if (!targetId || lobby.phase !== 'voting') return;
               
+              // --- KILLER TWIST CHECK ---
+              if (lobby.twistData?.type === 'killer') {
+                  if (user.uid !== lobby.twistData.killerId) return; // Solo il killer può votare
+              }
+
               const myTeam = myPlayer.team;
               const losingTeam = lobby.losingTeam;
               if (!isMerge && myTeam !== losingTeam) {
@@ -1958,12 +1986,20 @@
           // --- LOGICA ATTESA VOTI ---
           const pendingVotesCount = useMemo(() => {
               if (lobby.phase !== 'voting') return 0;
+              
+              // --- KILLER TWIST LOGIC ---
+              if (lobby.twistData?.type === 'killer') {
+                  const killer = lobby.players.find(p => p.uid === lobby.twistData.killerId);
+                  if (!killer || killer.isBot) return 0; // Se è bot o invalido, non aspettiamo umani
+                  return lobby.votes?.[killer.uid] ? 0 : 1; // Aspettiamo solo 1 voto (il killer)
+              }
+
               const voters = isMerge 
                   ? activePlayers 
                   : activePlayers.filter(p => p.team === lobby.losingTeam);
               // Correzione: Filtro via i bot dal conteggio pending
               return voters.filter(p => !p.isBot && !lobby.votes?.[p.uid]).length;
-          }, [lobby.phase, lobby.votes, isMerge, activePlayers, lobby.losingTeam]);
+          }, [lobby.phase, lobby.votes, isMerge, activePlayers, lobby.losingTeam, lobby.twistData]);
 
           // --- LOGICA ATTESA SOCIAL ---
           const pendingReadyCount = useMemo(() => {
@@ -2396,7 +2432,25 @@
 
                      {lobby.phase === 'voting' && (
                          <div className="flex flex-col items-center">
-                             <h2 className="text-3xl font-black mb-2 flex items-center gap-2"><Vote /> CHI VUOI ELIMINARE?</h2>
+                             
+                             {/* --- KILLER TWIST HEADER --- */}
+                             {lobby.twistData?.type === 'killer' ? (
+                                <div className="text-center animate-pulse">
+                                    <Gavel size={64} className="mx-auto text-red-500 mb-2"/>
+                                    <h2 className="text-4xl font-black text-red-500 mb-2 uppercase">POTERE DEL KILLER</h2>
+                                    {user.uid === lobby.twistData.killerId ? (
+                                        <p className="text-xl text-yellow-400 font-bold mb-8 bg-black/50 px-4 py-2 rounded">
+                                            HAI IL POTERE ASSOLUTO. SCEGLI CHI ELIMINARE.
+                                        </p>
+                                    ) : (
+                                        <p className="text-xl text-slate-400 font-bold mb-8 bg-black/50 px-4 py-2 rounded">
+                                            {lobby.players.find(p => p.uid === lobby.twistData.killerId)?.name} sta decidendo il tuo destino...
+                                        </p>
+                                    )}
+                                </div>
+                             ) : (
+                                <h2 className="text-3xl font-black mb-2 flex items-center gap-2"><Vote /> CHI VUOI ELIMINARE?</h2>
+                             )}
                              
                              {!isMerge && myPlayer.team !== lobby.losingTeam ? (
                                  <div className="mt-8 bg-green-600/20 border-2 border-green-500 p-8 rounded-2xl text-center animate-in zoom-in">
@@ -2406,7 +2460,9 @@
                                  </div>
                              ) : (
                                 <>
-                                 <p className="mb-8 text-slate-400">Clicca sul concorrente per votarlo. Il voto è segreto.</p>
+                                 {!lobby.twistData?.type || lobby.twistData.type !== 'killer' && (
+                                     <p className="mb-8 text-slate-400">Clicca sul concorrente per votarlo. Il voto è segreto.</p>
+                                 )}
                                  
                                  {myPlayer.status === 'eliminated' ? (
                                      <div className="text-xl text-red-500 font-bold">SEI STATO ELIMINATO, NON PUOI VOTARE.</div>
@@ -2417,24 +2473,38 @@
                                              if (!canVoteFor || p.uid === user.uid) return null;
                                              
                                              const iVotedFor = lobby.votes?.[user.uid] === p.uid;
+                                             
+                                             // --- KILLER TWIST: DISABLE FOR NON-KILLERS ---
+                                             const isKillerTwist = lobby.twistData?.type === 'killer';
+                                             const amIKiller = user.uid === lobby.twistData?.killerId;
+                                             const disabled = isKillerTwist && !amIKiller;
 
                                              return (
                                                  <button 
                                                     key={p.uid} 
                                                     onClick={() => submitVote(p.uid)}
-                                                    className={`relative group rounded-xl overflow-hidden aspect-[3/4] transition-all ${iVotedFor ? 'ring-4 ring-red-600 scale-105' : 'hover:scale-105 opacity-80 hover:opacity-100'}`}
+                                                    disabled={disabled}
+                                                    className={`relative group rounded-xl overflow-hidden aspect-[3/4] transition-all 
+                                                        ${disabled ? 'opacity-30 cursor-not-allowed grayscale' : iVotedFor ? 'ring-4 ring-red-600 scale-105' : 'hover:scale-105 opacity-80 hover:opacity-100'}
+                                                    `}
                                                  >
                                                      <img src={p.character.img} className="w-full h-full object-cover"/>
-                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-black text-red-500 text-xl tracking-widest bg-black/60">
-                                                         VOTA
-                                                     </div>
-                                                     {iVotedFor && <div className="absolute inset-0 flex items-center justify-center bg-red-600/50 font-black text-white">VOTATO</div>}
+                                                     {!disabled && (
+                                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-black text-red-500 text-xl tracking-widest bg-black/60">
+                                                             {isKillerTwist ? "ELIMINA" : "VOTA"}
+                                                         </div>
+                                                     )}
+                                                     {iVotedFor && <div className="absolute inset-0 flex items-center justify-center bg-red-600/50 font-black text-white">{isKillerTwist ? "SCELTO" : "VOTATO"}</div>}
                                                  </button>
                                              )
                                          })}
                                      </div>
                                  )}
-                                 <div className="mt-8 text-slate-500 italic">Attendi che l'host chiuda le votazioni...</div>
+                                 {lobby.twistData?.type === 'killer' && user.uid !== lobby.twistData.killerId ? (
+                                      <div className="mt-8 text-red-500 font-bold animate-pulse">PREGA DI NON ESSERE SCELTO...</div>
+                                 ) : (
+                                      <div className="mt-8 text-slate-500 italic">Attendi che l'host chiuda le votazioni...</div>
+                                 )}
                                </>
                              )}
                          </div>

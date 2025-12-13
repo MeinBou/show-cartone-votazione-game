@@ -112,7 +112,7 @@
         ];
 
         const ROSTER = [
-          { name: "Lord Farquaad", img: "https://i.pinimg.com/736x/35/93/ac/3593acb0b8f9d75704f5a0778c693e73.jpg" },
+         { name: "Lord Farquaad", img: "https://i.pinimg.com/736x/35/93/ac/3593acb0b8f9d75704f5a0778c693e73.jpg" },
           { name: "Marinette", img: "https://i.pinimg.com/736x/b8/74/55/b87455575cd069609007a639c9490293.jpg" },
           { name: "Adrien", img: "https://i.pinimg.com/1200x/5c/2d/c7/5c2dc740ed2fe906b6afaf1320bf4273.jpg" },
 		  { name: "Alya", img: "https://i.pinimg.com/736x/3e/3b/99/3e3b99fc26e6b2cb8bf7359c53acca24.jpg" },
@@ -378,6 +378,7 @@
               finalData: null, 
               redemptionData: null,
               idolData: null,
+              twistData: null, // NEW: Dati per i colpi di scena (es. Killer)
               timestamp: serverTimestamp()
             };
 
@@ -988,7 +989,7 @@
                  let winners = [];
                  Object.entries(rolls).forEach(([uid, r]) => {
                      if (r > maxRoll) { maxRoll = r; winners = [uid]; }
-                     else if (r === maxRoll) { winners.push(uid); }
+                     else if (r === minRoll) { winners.push(uid); }
                  });
 
                  // FIX: LOGICA PAREGGIO (SPAREGGIO)
@@ -1454,31 +1455,29 @@
             }
 
             else if (lobby.phase === 'social') {
-                // --- 5% KILLER TWIST (SOLO MERGE) ---
-                const isKillerTwist = isMerge && Math.random() < 0.05 && (lobby.immunity || []).length === 1;
-
-                if (isKillerTwist) {
-                     const killerId = lobby.immunity[0];
-                     const killerName = lobby.players.find(p => p.uid === killerId)?.name;
-                     // Se il killer è un bot, calcola subito il suo voto
-                     const isKillerBot = lobby.players.find(p => p.uid === killerId)?.isBot;
-                     const botVotes = isKillerBot ? calculateBotVotes(lobby, isMerge, killerId) : {}; 
-
-                     updates = {
-                        phase: 'voting',
-                        votes: botVotes,
-                        twistData: { active: true, type: 'killer', killerId: killerId },
-                        logs: arrayUnion(`COLPO DI SCENA! ${killerName} ha vinto l'immunità e deciderà DA SOLO chi eliminare!`)
-                     };
-                } else {
-                    const botVotes = calculateBotVotes(lobby, isMerge);
-                    updates = {
-                        phase: 'voting',
-                        votes: botVotes,
-                        twistData: null, // Reset twist data
-                        logs: arrayUnion("È TEMPO DI VOTARE!")
-                    };
+                // --- KILLER TWIST CHECK ---
+                let twistData = null;
+                const killerChance = Math.random() < 0.05; // 5% chance
+                
+                // Attiva solo se Merge e c'è un solo immune
+                if (isMerge && killerChance && lobby.immunity.length === 1) {
+                    const killerId = lobby.immunity[0];
+                    const killerName = lobby.players.find(p => p.uid === killerId)?.name;
+                    twistData = { type: 'killer', killerId: killerId };
+                    newLogs.push(`!!! COLPO DI SCENA !!! Chris: "Il vincitore dell'immunità ha il POTERE ASSOLUTO! Solo ${killerName} voterà stasera!"`);
                 }
+                // ---------------------------
+
+                // Passiamo lo stato futuro per calcolare correttamente i voti dei bot
+                const futureLobbyState = { ...lobby, twistData };
+                const botVotes = calculateBotVotes(futureLobbyState, isMerge);
+                
+                updates = {
+                    phase: 'voting',
+                    votes: botVotes,
+                    twistData: twistData, // Aggiunge i dati del twist
+                    logs: arrayUnion(...newLogs, "È TEMPO DI VOTARE!")
+                };
             }
 
             else if (lobby.phase === 'voting') {
@@ -1518,10 +1517,10 @@
                     players: updatedPlayersWithVotes,
                     ceremonyData: { 
                         safe, bottomTwo, eliminated, revealedCount: 0, voteCounts,
-                        isDoubleElimination: isDoubleElimination, // Nuovo campo
-                        isOpenVote: isOpenVote, // NEW: Flag voti palesi
-                        votersMap: votersMap,   // NEW: Mappa votanti
-                        eliminatedSecond: (eliminated && eliminated.length > 1) ? eliminated[1] : null, // Secondo eliminato
+                        isDoubleElimination: isDoubleElimination, 
+                        isOpenVote: isOpenVote, 
+                        votersMap: votersMap,
+                        eliminatedSecond: (eliminated && eliminated.length > 1) ? eliminated[1] : null,
                         tieMatch: tie ? { candidates: tie, rolls: {}, stage: 'rolling' } : null
                     },
                     logs: arrayUnion("--- CERIMONIA DI ELIMINAZIONE ---", ...newLogs)
@@ -1590,15 +1589,12 @@
                       updates[`idolData.active`] = false; 
                       updates[`idolData.holder`] = null;
 
-                      // Sostituisce il primo eliminato con il prossimo più votato (il terzo se non c'è doppio, o il secondo del bottomTwo se non è doppio, oppure il terzo in generale se doppio)
-                      // Poiché calculateCeremonyResults ritorna 'eliminated' come array ordinato per voti (dal più alto), il secondo elemento è il 'runner up'
                       const runnerUpId = data.bottomTwo.find(id => id !== firstVictim);
                       
                       if (runnerUpId) {
                          firstVictim = runnerUpId;
                          newLogs.push(`Il secondo più votato, ${lobby.players.find(p => p.uid === firstVictim).name}, viene eliminato al suo posto!`);
                       } else {
-                          // Solo se c'è un voto unanime non gestito dal tie, annulliamo l'eliminazione
                           newLogs.push("Nessun altro da eliminare! Eliminazione annullata.");
                           firstVictim = null;
                       }
@@ -1611,22 +1607,15 @@
                       // --- IDOL CHECK (Second Victim - solo in doppia eliminazione) ---
                       if (isDouble && data.eliminatedSecond) {
                           let secondVictim = data.eliminatedSecond;
-                          if (secondVictim === firstVictim) { // Se il secondo eliminato è stato promosso a primo
-                             // In una doppia eliminazione, l'obiettivo è eliminare i due con più voti. 
-                             // Se il primo si salva, il "runner-up" diventa il primo eliminato, e il prossimo più votato (quarto in linea) dovrebbe uscire come secondo.
-                             // Per semplicità, consideriamo il secondo elemento di 'eliminated' come il secondo più votato.
+                          if (secondVictim === firstVictim) {
                              const topTwoIds = Object.keys(data.voteCounts).sort((a, b) => data.voteCounts[b] - data.voteCounts[a]);
-                             
-                             // Trova l'ID del concorrente che è al secondo posto in termini di voti, e non è già nella lista dei finalVictims
                              let nextVictim = topTwoIds.find(id => !finalVictims.includes(id) && lobby.players.find(p => p.uid === id).status === 'active');
-                             
                              secondVictim = nextVictim;
 
                           } else if (secondVictim === lobby.idolData?.holder && lobby.idolData?.active) {
                               newLogs.push(`COSA?! ${lobby.players.find(p => p.uid === secondVictim).name} usa il SECONDO Idolo dell'Immunità (non supportato per semplicità, ma il dramma è vero!)`);
                               updates[`idolData.active`] = false; 
                               updates[`idolData.holder`] = null;
-                              // Annullo la seconda eliminazione se c'è un idolo in gioco (solo un idolo per ora)
                               secondVictim = null; 
                           }
 
@@ -1686,6 +1675,7 @@
                         losingTeam: null,
                         ceremonyData: null,
                         challengeData: null,
+                        twistData: null, // RESET TWIST DATA
                         logs: arrayUnion(...newLogs, `--- EPISODIO SPECIALE: REDEMPTION! ---`)
                       };
                   } else {
@@ -1699,6 +1689,7 @@
                         losingTeam: null,
                         ceremonyData: null,
                         challengeData: null,
+                        twistData: null, // RESET TWIST DATA
                         logs: arrayUnion(...newLogs)
                       };
                   }
@@ -1790,14 +1781,24 @@
               await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
           };
 
-          const calculateBotVotes = (lobbyState, isMerge, killerId = null) => {
+          const calculateBotVotes = (lobbyState, isMerge) => {
             const votes = {};
-            const activeBots = lobbyState.players.filter(p => {
+            let activeBots = lobbyState.players.filter(p => { // Changed const to let
                 if (!p.isBot || p.status !== 'active') return false;
-                if (killerId && p.uid !== killerId) return false; // Se c'è un killer, vota solo lui
                 if (isMerge) return true;
                 return p.team === lobbyState.losingTeam;
             });
+
+            // --- KILLER TWIST LOGIC ---
+            if (lobbyState.twistData?.type === 'killer') {
+                const killerId = lobbyState.twistData.killerId;
+                const killerBot = activeBots.find(b => b.uid === killerId);
+                // Se il killer non è un bot, nessun bot vota.
+                if (!killerBot) return {};
+                // Se il killer è un bot, solo lui vota.
+                activeBots = [killerBot];
+            }
+            // ---------------------------
 
             let candidates = [];
             
@@ -1959,9 +1960,11 @@
               if (!targetId || lobby.phase !== 'voting') return;
               
               // --- KILLER TWIST CHECK ---
-              if (lobby.twistData?.type === 'killer') {
-                  if (user.uid !== lobby.twistData.killerId) return; // Solo il killer può votare
+              if (lobby.twistData?.type === 'killer' && user.uid !== lobby.twistData.killerId) {
+                  // Impedisce il voto se non sei il killer
+                  return;
               }
+              // ---------------------------
 
               const myTeam = myPlayer.team;
               const losingTeam = lobby.losingTeam;
@@ -1986,13 +1989,18 @@
           // --- LOGICA ATTESA VOTI ---
           const pendingVotesCount = useMemo(() => {
               if (lobby.phase !== 'voting') return 0;
-              
+
               // --- KILLER TWIST LOGIC ---
               if (lobby.twistData?.type === 'killer') {
-                  const killer = lobby.players.find(p => p.uid === lobby.twistData.killerId);
-                  if (!killer || killer.isBot) return 0; // Se è bot o invalido, non aspettiamo umani
-                  return lobby.votes?.[killer.uid] ? 0 : 1; // Aspettiamo solo 1 voto (il killer)
+                  const killerId = lobby.twistData.killerId;
+                  const killer = lobby.players.find(p => p.uid === killerId);
+                  // Se il killer è umano e non ha ancora votato, pending è 1. Altrimenti 0.
+                  if (killer && !killer.isBot && !lobby.votes?.[killerId]) {
+                      return 1;
+                  }
+                  return 0;
               }
+              // ---------------------------
 
               const voters = isMerge 
                   ? activePlayers 
@@ -2108,6 +2116,7 @@
                      
                      {/* --- IDOL HUNT VIEW --- */}
                      {lobby.phase === 'idol_hunt' && lobby.idolData && (
+                         // ... (codice esistente)
                          <div className="flex flex-col items-center justify-center min-h-[80vh]">
                             <h2 className="text-4xl font-black text-yellow-400 mb-2 uppercase drop-shadow-lg">CACCIA AL TESORO</h2>
                             <p className="text-slate-300 mb-8 max-w-xl text-center">
@@ -2180,6 +2189,7 @@
 
                      {/* --- REDEMPTION VIEW --- */}
                      {lobby.phase === 'redemption' && lobby.redemptionData && (
+                        // ... (codice esistente)
                          <div className="flex flex-col items-center justify-center min-h-full">
                              <div className="text-center mb-8">
                                  <h1 className="text-5xl font-black text-orange-500 mb-2 uppercase tracking-widest drop-shadow-md">Redemption Island</h1>
@@ -2275,6 +2285,7 @@
                      )}
 
                     {lobby.phase === 'season_setup' && isHost && nextSeasonConfig && (
+                        // ... (codice esistente)
                         <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
                             <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl border-2 border-yellow-500 max-w-lg w-full">
                                 <h2 className="text-3xl font-black text-center mb-6 text-yellow-400">CONFIGURA STAGIONE {lobby.currentSeasonIndex + 2}</h2>
@@ -2346,6 +2357,7 @@
                     )}
                      
                      {lobby.phase === 'challenge' && isMerge && lobby.challengeData && (
+                        // ... (codice esistente)
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
                             {lobby.challengeData.stage === 'rolling' ? (
                                 <div className="text-center animate-pulse w-full max-w-4xl">
@@ -2432,24 +2444,18 @@
 
                      {lobby.phase === 'voting' && (
                          <div className="flex flex-col items-center">
-                             
                              {/* --- KILLER TWIST HEADER --- */}
                              {lobby.twistData?.type === 'killer' ? (
-                                <div className="text-center animate-pulse">
-                                    <Gavel size={64} className="mx-auto text-red-500 mb-2"/>
-                                    <h2 className="text-4xl font-black text-red-500 mb-2 uppercase">POTERE DEL KILLER</h2>
-                                    {user.uid === lobby.twistData.killerId ? (
-                                        <p className="text-xl text-yellow-400 font-bold mb-8 bg-black/50 px-4 py-2 rounded">
-                                            HAI IL POTERE ASSOLUTO. SCEGLI CHI ELIMINARE.
-                                        </p>
-                                    ) : (
-                                        <p className="text-xl text-slate-400 font-bold mb-8 bg-black/50 px-4 py-2 rounded">
-                                            {lobby.players.find(p => p.uid === lobby.twistData.killerId)?.name} sta decidendo il tuo destino...
-                                        </p>
-                                    )}
-                                </div>
+                                 <div className="bg-red-600/90 text-white p-6 rounded-2xl mb-8 text-center shadow-[0_0_30px_rgba(220,38,38,0.5)] border-4 border-red-500 animate-bounce">
+                                     <div className="flex items-center justify-center gap-4 mb-2">
+                                        <Gavel size={48} className="text-white"/>
+                                        <h2 className="text-4xl font-black uppercase tracking-widest">POTERE DEL KILLER</h2>
+                                        <Gavel size={48} className="text-white scale-x-[-1]"/>
+                                     </div>
+                                     <p className="text-xl">Solo <span className="font-bold text-yellow-300 text-2xl">{lobby.players.find(p => p.uid === lobby.twistData.killerId)?.name}</span> può votare stasera!</p>
+                                 </div>
                              ) : (
-                                <h2 className="text-3xl font-black mb-2 flex items-center gap-2"><Vote /> CHI VUOI ELIMINARE?</h2>
+                                 <h2 className="text-3xl font-black mb-2 flex items-center gap-2"><Vote /> CHI VUOI ELIMINARE?</h2>
                              )}
                              
                              {!isMerge && myPlayer.team !== lobby.losingTeam ? (
@@ -2460,11 +2466,14 @@
                                  </div>
                              ) : (
                                 <>
-                                 {!lobby.twistData?.type || lobby.twistData.type !== 'killer' && (
-                                     <p className="mb-8 text-slate-400">Clicca sul concorrente per votarlo. Il voto è segreto.</p>
-                                 )}
+                                 {lobby.twistData?.type !== 'killer' && <p className="mb-8 text-slate-400">Clicca sul concorrente per votarlo. Il voto è segreto.</p>}
                                  
-                                 {myPlayer.status === 'eliminated' ? (
+                                 {/* Check if user can vote in killer twist */}
+                                 {lobby.twistData?.type === 'killer' && user.uid !== lobby.twistData.killerId ? (
+                                     <div className="text-2xl text-red-500 font-black bg-black/50 px-8 py-4 rounded-xl animate-pulse">
+                                         NON PUOI VOTARE. Il tuo destino è nelle mani del Killer.
+                                     </div>
+                                 ) : myPlayer.status === 'eliminated' ? (
                                      <div className="text-xl text-red-500 font-bold">SEI STATO ELIMINATO, NON PUOI VOTARE.</div>
                                  ) : (
                                      <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
@@ -2473,44 +2482,33 @@
                                              if (!canVoteFor || p.uid === user.uid) return null;
                                              
                                              const iVotedFor = lobby.votes?.[user.uid] === p.uid;
-                                             
-                                             // --- KILLER TWIST: DISABLE FOR NON-KILLERS ---
-                                             const isKillerTwist = lobby.twistData?.type === 'killer';
-                                             const amIKiller = user.uid === lobby.twistData?.killerId;
-                                             const disabled = isKillerTwist && !amIKiller;
 
                                              return (
                                                  <button 
                                                     key={p.uid} 
                                                     onClick={() => submitVote(p.uid)}
-                                                    disabled={disabled}
-                                                    className={`relative group rounded-xl overflow-hidden aspect-[3/4] transition-all 
-                                                        ${disabled ? 'opacity-30 cursor-not-allowed grayscale' : iVotedFor ? 'ring-4 ring-red-600 scale-105' : 'hover:scale-105 opacity-80 hover:opacity-100'}
-                                                    `}
+                                                    // Disable button if it's a killer twist and user is not the killer (extra safety)
+                                                    disabled={lobby.twistData?.type === 'killer' && user.uid !== lobby.twistData.killerId}
+                                                    className={`relative group rounded-xl overflow-hidden aspect-[3/4] transition-all ${iVotedFor ? 'ring-4 ring-red-600 scale-105' : 'hover:scale-105 opacity-80 hover:opacity-100'} ${lobby.twistData?.type === 'killer' && user.uid !== lobby.twistData.killerId ? 'cursor-not-allowed opacity-50' : ''}`}
                                                  >
                                                      <img src={p.character.img} className="w-full h-full object-cover"/>
-                                                     {!disabled && (
-                                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-black text-red-500 text-xl tracking-widest bg-black/60">
-                                                             {isKillerTwist ? "ELIMINA" : "VOTA"}
-                                                         </div>
-                                                     )}
-                                                     {iVotedFor && <div className="absolute inset-0 flex items-center justify-center bg-red-600/50 font-black text-white">{isKillerTwist ? "SCELTO" : "VOTATO"}</div>}
+                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-black text-red-500 text-xl tracking-widest bg-black/60">
+                                                         VOTA
+                                                     </div>
+                                                     {iVotedFor && <div className="absolute inset-0 flex items-center justify-center bg-red-600/50 font-black text-white">VOTATO</div>}
                                                  </button>
                                              )
                                          })}
                                      </div>
                                  )}
-                                 {lobby.twistData?.type === 'killer' && user.uid !== lobby.twistData.killerId ? (
-                                      <div className="mt-8 text-red-500 font-bold animate-pulse">PREGA DI NON ESSERE SCELTO...</div>
-                                 ) : (
-                                      <div className="mt-8 text-slate-500 italic">Attendi che l'host chiuda le votazioni...</div>
-                                 )}
+                                 <div className="mt-8 text-slate-500 italic">Attendi che l'host chiuda le votazioni...</div>
                                </>
                              )}
                          </div>
                      )}
 
                      {lobby.phase === 'final_showdown' && lobby.finalData && (
+                        // ... (codice esistente)
                          <div className="flex flex-col items-center h-full">
                              <h1 className="text-4xl font-black text-yellow-400 mb-8 uppercase tracking-widest">GRAN FINALE</h1>
                              
@@ -2567,6 +2565,7 @@
                      )}
 
                      {lobby.phase === 'game_over' && (
+                        // ... (codice esistente)
                          <div className="flex flex-col items-center h-full justify-center">
                              <h1 className="text-5xl font-black text-yellow-400 mb-8">CLASSIFICA FINALE</h1>
                              
@@ -2647,6 +2646,7 @@
                      )}
 
                      {(lobby.phase === 'social' || lobby.phase === 'ceremony') && (
+                         // ... (codice esistente)
                          <>
                          {lobby.phase === 'social' && !isMerge && lobby.losingTeam && (
                             <div className="bg-red-600/90 text-white p-4 rounded-xl mb-4 text-center font-black text-xl shadow-lg border-2 border-red-400 animate-pulse">

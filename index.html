@@ -112,7 +112,7 @@
         ];
 
         const ROSTER = [
-         { name: "Lord Farquaad", img: "https://i.pinimg.com/736x/35/93/ac/3593acb0b8f9d75704f5a0778c693e73.jpg" },
+          { name: "Lord Farquaad", img: "https://i.pinimg.com/736x/35/93/ac/3593acb0b8f9d75704f5a0778c693e73.jpg" },
           { name: "Marinette", img: "https://i.pinimg.com/736x/b8/74/55/b87455575cd069609007a639c9490293.jpg" },
           { name: "Adrien", img: "https://i.pinimg.com/1200x/5c/2d/c7/5c2dc740ed2fe906b6afaf1320bf4273.jpg" },
 		  { name: "Alya", img: "https://i.pinimg.com/736x/3e/3b/99/3e3b99fc26e6b2cb8bf7359c53acca24.jpg" },
@@ -545,10 +545,10 @@
                   
                   <div className="space-y-6">
                     <div>
-                      {/* MODIFICATO IL LIMITE MAX A 62 */}
-                      <label className="block text-slate-400 font-bold mb-2">Concorrenti (8 - 62)</label>
+                      {/* MODIFICATO IL LIMITE MAX A 100 */}
+                      <label className="block text-slate-400 font-bold mb-2">Concorrenti (8 - 100)</label>
                       <div className="flex items-center gap-4">
-                        <input type="range" min="8" max="62" value={config.maxPlayers} onChange={e => {
+                        <input type="range" min="8" max="100" value={config.maxPlayers} onChange={e => {
                             const newVal = parseInt(e.target.value);
                             setConfig({
                                 ...config, 
@@ -680,7 +680,11 @@
             currentPlayers = currentPlayers.map(p => {
               if (!p.character) {
                 const available = ROSTER.filter(r => !usedNames.has(r.name));
-                const random = available[Math.floor(Math.random() * available.length)];
+                // Se non ci sono personaggi disponibili, prendine uno a caso dal mucchio
+                const random = available.length > 0 
+                    ? available[Math.floor(Math.random() * available.length)]
+                    : ROSTER[Math.floor(Math.random() * ROSTER.length)];
+                
                 usedNames.add(random.name);
                 return { ...p, character: random };
               }
@@ -689,14 +693,25 @@
 
             while (currentPlayers.length < lobby.config.maxPlayers) {
               const available = ROSTER.filter(r => !usedNames.has(r.name));
-              if (available.length === 0) break;
-              const randomChar = available[Math.floor(Math.random() * available.length)];
-              usedNames.add(randomChar.name);
+              
+              let randomChar;
+              let botName;
+
+              if (available.length > 0) {
+                  // Caso normale: prendi dal roster univoco
+                  randomChar = available[Math.floor(Math.random() * available.length)];
+                  botName = randomChar.name;
+                  usedNames.add(botName);
+              } else {
+                  // Fallback: se il roster finisce (prima che tu lo aggiorni), crea cloni per arrivare a 100
+                  randomChar = ROSTER[Math.floor(Math.random() * ROSTER.length)];
+                  botName = `${randomChar.name} ${Math.floor(Math.random() * 999)}`;
+              }
               
               const botId = `bot_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
               currentPlayers.push({
                 uid: botId,
-                name: randomChar.name,
+                name: botName,
                 character: randomChar,
                 isBot: true,
                 status: 'active',
@@ -814,12 +829,14 @@
           const [selectedRedemptionCandidates, setSelectedRedemptionCandidates] = useState([]);
 
           const [selectedPlayer, setSelectedPlayer] = useState(null);
-          const [showRumorSelector, setShowRumorSelector] = useState(false); // NUOVO STATO
+          const [showRumorSelector, setShowRumorSelector] = useState(false); 
+          const [showTrioSelector, setShowTrioSelector] = useState(false); // NUOVO STATO
 
           useEffect(() => {
             setHasActed(false);
             setSelectedPlayer(null);
             setShowRumorSelector(false);
+            setShowTrioSelector(false); // Reset
           }, [lobby.phase, lobby.round]);
 
           useEffect(() => {
@@ -1420,6 +1437,14 @@
                                   
                                   updates.players = updatedPlayers;
                                   newLogs.push(`COLPO DI SCENA! Chris: "${victim.name}, prendi le tue cose! Passi dai ${bigTeam} ai ${smallTeam}!"`);
+                                  
+                                  // AGGIUNTA: Salva i dati del twist per mostrarli nella UI
+                                  updates.twistData = { 
+                                      type: 'team_swap', 
+                                      victimName: victim.name, 
+                                      fromTeam: bigTeam, 
+                                      toTeam: smallTeam 
+                                  };
                               }
                           }
                       }
@@ -1921,15 +1946,12 @@
                   } else msg = `${updatedPlayers[targetIdx].name} ti ha ignorato.`;
               } 
               else if (type === 'rumor') {
-                  // Payload contiene l'ID della vittima scelta dall'utente
-                  const victimId = payload;
-                  const victim = updatedPlayers.find(p => p.uid === victimId);
-                  
+                  // ... existing logic ...
                   if (!victim) {
                        msg = "Errore: bersaglio non trovato.";
                   } else {
                       if (Math.random() > 0.5) {
-                          // SUCCESSO (50%): Target odia Victim (-1)
+                          // SUCCESSO (50%)
                           const currentRel = updatedPlayers[targetIdx].relationships[victimId] || 0;
                           updatedPlayers[targetIdx].relationships = { 
                               ...updatedPlayers[targetIdx].relationships, 
@@ -1937,7 +1959,7 @@
                           };
                           msg = `🤫 Pssst! Hai messo zizzania con successo. ${targetName} ora guarda male ${victim.name} (-1).`;
                       } else {
-                          // FALLIMENTO (50%): Target odia Te (-1)
+                          // FALLIMENTO (50%)
                           const currentRel = updatedPlayers[targetIdx].relationships[user.uid] || 0;
                           updatedPlayers[targetIdx].relationships = { 
                               ...updatedPlayers[targetIdx].relationships, 
@@ -1945,6 +1967,48 @@
                           };
                           msg = `😓 Hai provato a spettegolare su ${victim.name}, ma ${targetName} ti ha scoperto! (Relazione -1)`;
                       }
+                  }
+              }
+              else if (type === 'alliance_trio') {
+                  // Payload è l'ID del TERZO membro (il secondo amico)
+                  const thirdId = payload;
+                  const thirdIdx = updatedPlayers.findIndex(p => p.uid === thirdId);
+                  const thirdName = updatedPlayers[thirdIdx].name;
+
+                  // 30% di Successo
+                  if (Math.random() < 0.30) {
+                      // SUCCESSO: Tripla Alleanza e Boost Relazioni
+                      
+                      // 1. Aggiorna Alleanze (Tutti con Tutti)
+                      const myAllies = [...(updatedPlayers[myIdx].alliances || []), targetId, thirdId];
+                      const targetAllies = [...(updatedPlayers[targetIdx].alliances || []), user.uid, thirdId];
+                      const thirdAllies = [...(updatedPlayers[thirdIdx].alliances || []), user.uid, targetId];
+
+                      updatedPlayers[myIdx].alliances = [...new Set(myAllies)];
+                      updatedPlayers[targetIdx].alliances = [...new Set(targetAllies)];
+                      updatedPlayers[thirdIdx].alliances = [...new Set(thirdAllies)];
+
+                      // 2. Boost Relazioni (+3 tra tutti per solidificare)
+                      // Io con Target
+                      updatedPlayers[myIdx].relationships[targetId] = (updatedPlayers[myIdx].relationships[targetId] || 0) + 3;
+                      updatedPlayers[targetIdx].relationships[user.uid] = (updatedPlayers[targetIdx].relationships[user.uid] || 0) + 3;
+                      
+                      // Io con Terzo
+                      updatedPlayers[myIdx].relationships[thirdId] = (updatedPlayers[myIdx].relationships[thirdId] || 0) + 3;
+                      updatedPlayers[thirdIdx].relationships[user.uid] = (updatedPlayers[thirdIdx].relationships[user.uid] || 0) + 3;
+
+                      // Target con Terzo (Si amano anche loro ora)
+                      updatedPlayers[targetIdx].relationships[thirdId] = (updatedPlayers[targetIdx].relationships[thirdId] || 0) + 3;
+                      updatedPlayers[thirdIdx].relationships[targetId] = (updatedPlayers[thirdIdx].relationships[targetId] || 0) + 3;
+
+                      msg = `🤝 PATTO DI SANGUE! Hai formato una POTENTE Alleanza a 3 con ${targetName} e ${thirdName}! (Tutti +3 Relazione)`;
+                  } else {
+                      // FALLIMENTO
+                      // Piccola penalità, sembri troppo ambizioso
+                      updatedPlayers[targetIdx].relationships[user.uid] = (updatedPlayers[targetIdx].relationships[user.uid] || 0) - 2;
+                      updatedPlayers[thirdIdx].relationships[user.uid] = (updatedPlayers[thirdIdx].relationships[user.uid] || 0) - 2;
+                      
+                      msg = `💔 Hai proposto un trio a ${targetName} e ${thirdName}, ma non si fidano abbastanza. È stato imbarazzante. (-2 Relazione)`;
                   }
               }
               else if (type === 'flirt') {
@@ -2042,6 +2106,7 @@
               setHasActed(true);
               setSelectedPlayer(null);
               setShowRumorSelector(false); // Reset
+              setShowTrioSelector(false); // Reset
           };
 
           const submitVote = async (targetId) => {
@@ -2066,7 +2131,7 @@
                   [`votes.${user.uid}`]: targetId
               };
 
-              // --- LOGICA ALLEATI (50% Chance di seguire il voto) ---
+              // --- LOGICA ALLEATI (40% Chance di seguire il voto) ---
               // Se hai degli alleati, potrebbero decidere di fidarsi di te e votare uguale.
               if (lobby.twistData?.type !== 'killer') {
                   const myAllies = lobby.players.filter(p => 
@@ -2082,8 +2147,8 @@
                       const canVote = isMerge || lobby.twistData?.type === 'joint_ceremony' || ally.team === losingTeam;
                       
                       if (canVote) {
-                          // 50% di probabilità che l'alleato copi il tuo voto
-                          if (Math.random() < 0.50) {
+                          // 40% di probabilità che l'alleato copi il tuo voto
+                          if (Math.random() < 0.40) {
                               updates[`votes.${ally.uid}`] = targetId;
                               console.log(`L'alleato ${ally.name} ti ha seguito nel voto!`);
                           }
@@ -2141,7 +2206,7 @@
                {selectedPlayer && lobby.phase === 'social' && (
                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
                        <div className="bg-slate-900 rounded-2xl border-2 border-yellow-500 max-w-sm w-full relative">
-                           <button onClick={() => { setSelectedPlayer(null); setShowRumorSelector(false); }} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"><X size={20}/></button>
+                           <button onClick={() => { setSelectedPlayer(null); setShowRumorSelector(false); setShowTrioSelector(false); }} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"><X size={20}/></button>
                            <div className="p-6 text-center">
                                <h2 className="text-3xl font-black mb-1">{selectedPlayer.name}</h2>
                                <div className="text-sm text-slate-400 mb-4">{selectedPlayer.team || "Merge"}</div>
@@ -2159,11 +2224,11 @@
                                    </div>
                                </div>
                                {!hasActed && myPlayer.status === 'active' && (
-                                   !showRumorSelector ? (
+                                   !showRumorSelector && !showTrioSelector ? (
                                    <div className="space-y-2">
                                        <button onClick={() => handleInteraction('friend')} className="w-full bg-green-600 py-3 rounded font-bold flex justify-center gap-2"><Heart/> Amicizia</button>
                                        
-                                       {/* MODIFICA: Logica Fedeltà */}
+                                       {/* ... Flirt button ... */}
                                        {(() => {
                                            // Controlla se il giocatore ha già una relazione a 15 con QUALCUNO
                                            const isEngaged = Object.values(myPlayer.relationships || {}).some(v => v === 15);
@@ -2180,8 +2245,36 @@
                                        })()}
 
                                        <button onClick={() => handleInteraction('alliance')} className="w-full bg-blue-600 py-3 rounded font-bold flex justify-center gap-2"><Swords/> Alleanza</button>
+                                       
+                                       {/* NEW: ALLEANZA A 3 */}
+                                       {(() => {
+                                           // Requisiti: 
+                                           // 1. SelectedPlayer deve essere amico (>0)
+                                           // 2. Deve esserci ALMENO un altro amico attivo nel gioco
+                                           const isFriend = (selectedPlayer.relationships[user.uid] || 0) > 0;
+                                           const otherFriends = lobby.players.filter(p => 
+                                                p.uid !== user.uid && 
+                                                p.uid !== selectedPlayer.uid && 
+                                                p.status === 'active' && 
+                                                (p.relationships[user.uid] || 0) > 0
+                                           );
+                                           const canFormTrio = isFriend && otherFriends.length > 0;
+
+                                           return (
+                                               <button 
+                                                   onClick={() => setShowTrioSelector(true)} 
+                                                   disabled={!canFormTrio}
+                                                   className={`w-full py-3 rounded font-bold flex justify-center gap-2 border ${!canFormTrio ? 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500'}`}
+                                               >
+                                                   <Users/> {!isFriend ? "SERVE AMICIZIA" : otherFriends.length === 0 ? "SERVE 3° AMICO" : "Alleanza a 3 (30%)"}
+                                               </button>
+                                           );
+                                       })()}
+
                                        <button onClick={() => setShowRumorSelector(true)} className="w-full bg-purple-600 py-3 rounded font-bold flex justify-center gap-2"><MessageSquare/> Metti Zizzania (50%)</button>
                                        <button onClick={() => handleInteraction('callout')} className="w-full bg-orange-600 py-3 rounded font-bold flex justify-center gap-2"><AlertTriangle/> Call Out</button>
+                                       
+                                       {/* ... Threaten button ... */}
                                        {(() => {
                                            const hasThreatened = (myPlayer.threatenedPlayers || []).includes(selectedPlayer.uid);
                                            return (
@@ -2195,7 +2288,7 @@
                                            );
                                        })()}
                                    </div>
-                                   ) : (
+                                   ) : showRumorSelector ? (
                                      <div className="animate-in fade-in">
                                          <div className="text-sm font-bold text-slate-300 mb-2">Di chi vuoi sparlare?</div>
                                          <div className="grid grid-cols-3 gap-2 mb-2 max-h-60 overflow-y-auto custom-scrollbar">
@@ -2213,6 +2306,29 @@
                                              )}
                                          </div>
                                          <button onClick={() => setShowRumorSelector(false)} className="w-full bg-slate-700 hover:bg-slate-600 py-2 rounded text-xs font-bold flex items-center justify-center gap-1"><Undo2 size={14}/> Annulla</button>
+                                     </div>
+                                   ) : (
+                                     /* SELETTORE TERZO MEMBRO ALLEANZA */
+                                     <div className="animate-in fade-in">
+                                         <div className="text-sm font-bold text-indigo-300 mb-2">Chi è il 3° membro?</div>
+                                         <div className="grid grid-cols-3 gap-2 mb-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                             {lobby.players
+                                                 .filter(p => 
+                                                     p.uid !== user.uid && 
+                                                     p.uid !== selectedPlayer.uid && 
+                                                     p.status === 'active' && 
+                                                     (p.relationships[user.uid] || 0) > 0 // Solo Amici
+                                                 )
+                                                 .map(p => (
+                                                     <button key={p.uid} onClick={() => handleInteraction('alliance_trio', p.uid)} className="bg-slate-800 hover:bg-slate-700 p-2 rounded flex flex-col items-center border border-slate-700 hover:border-indigo-500 transition">
+                                                         <img src={p.character.img} className="w-8 h-8 rounded-full mb-1 object-cover"/>
+                                                         <span className="text-[10px] truncate w-full leading-tight">{p.name}</span>
+                                                         <span className="text-[9px] text-green-400 font-bold">Amico</span>
+                                                     </button>
+                                                 ))
+                                             }
+                                         </div>
+                                         <button onClick={() => setShowTrioSelector(false)} className="w-full bg-slate-700 hover:bg-slate-600 py-2 rounded text-xs font-bold flex items-center justify-center gap-1"><Undo2 size={14}/> Annulla</button>
                                      </div>
                                    )
                                )}
@@ -2524,9 +2640,33 @@
                         </div>
                     )}
                      
-                     {lobby.phase === 'challenge' && isMerge && lobby.challengeData && (
+                     {/* --- VISUALIZZAZIONE SFIDA (CON NOTIFICA TEAM SWAP) --- */}
+                     {lobby.phase === 'challenge' && (
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
-                            {lobby.challengeData.stage === 'rolling' ? (
+                            
+                            {/* NOTIFICA TEAM SWAP */}
+                            {lobby.twistData?.type === 'team_swap' && (
+                                 <div className="bg-orange-600/90 text-white p-8 rounded-2xl mb-8 text-center shadow-[0_0_30px_rgba(234,88,12,0.5)] border-4 border-orange-500 animate-bounce max-w-3xl z-50">
+                                     <div className="flex items-center justify-center gap-4 mb-4">
+                                        <Shuffle size={48} className="text-white"/>
+                                        <h2 className="text-4xl font-black uppercase tracking-widest">CAMBIO SQUADRA!</h2>
+                                        <Shuffle size={48} className="text-white scale-x-[-1]"/>
+                                     </div>
+                                     <div className="text-2xl mb-4">
+                                         <span className="font-bold text-yellow-300 text-4xl drop-shadow-md">{lobby.twistData.victimName}</span>
+                                     </div>
+                                     <div className="flex items-center justify-center gap-4 text-xl font-bold bg-black/30 p-4 rounded-xl">
+                                         <span className="text-red-300">{lobby.twistData.fromTeam}</span>
+                                         <ArrowRight size={32} className="text-white" />
+                                         <span className="text-green-300">{lobby.twistData.toTeam}</span>
+                                     </div>
+                                     <p className="mt-4 text-orange-200 italic">"Mai mettersi troppo comodi!" - Chris</p>
+                                 </div>
+                            )}
+
+                            {/* LOGICA VISUALIZZAZIONE SFIDA ESISTENTE (MERGE) */}
+                            {isMerge && lobby.challengeData && (
+                                lobby.challengeData.stage === 'rolling' ? (
                                 <div className="text-center animate-pulse w-full max-w-4xl">
                                     <h2 className="text-3xl font-bold mb-4 uppercase flex items-center justify-center gap-3">
                                         {lobby.challengeData.type === 'sudden_death' && <AlertOctagon size={40} className="text-red-600"/>}
@@ -2605,7 +2745,18 @@
                                      </div>
                                      {isHost && <div className="text-sm text-slate-400">Clicca Avanti per continuare</div>}
                                 </div>
-                            )}
+                            )
+                           )}
+                           
+                           {/* LOGICA VISUALIZZAZIONE SFIDA PRE-MERGE (SEMPLICE) */}
+                           {!isMerge && !lobby.twistData && (
+                               <div className="text-center animate-pulse">
+                                   <Trophy size={64} className="text-slate-600 mx-auto mb-4"/>
+                                   <h2 className="text-3xl font-black text-white mb-2">SFIDA A SQUADRE IN CORSO...</h2>
+                                   <div className="text-slate-400">Chi vincerà l'immunità oggi?</div>
+                                   {isHost && <div className="mt-4 text-sm text-yellow-500 font-bold">Clicca AVANTI per scoprire i risultati</div>}
+                               </div>
+                           )}
                         </div>
                      )}
 
@@ -2623,6 +2774,19 @@
                                  </div>
                              ) : (
                                  <h2 className="text-3xl font-black mb-2 flex items-center gap-2"><Vote /> CHI VUOI ELIMINARE?</h2>
+                             )}
+                             
+                             {/* --- JOINT CEREMONY HEADER (NEW) --- */}
+                             {lobby.twistData?.type === 'joint_ceremony' && (
+                                 <div className="bg-purple-900/80 border-2 border-purple-500 p-4 rounded-xl mb-6 text-center shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-in slide-in-from-top duration-500">
+                                     <h3 className="text-2xl font-black text-purple-300 uppercase flex items-center justify-center gap-2 mb-2">
+                                        <Users2 className="animate-pulse"/> CERIMONIA CONGIUNTA!
+                                     </h3>
+                                     <p className="text-white text-lg leading-tight">
+                                         Colpo di scena! Anche il team vincente partecipa al voto.<br/>
+                                         <span className="text-purple-200 text-sm">Aiuta ad eliminare un membro del team <strong className="text-red-400 uppercase">{lobby.losingTeam}</strong>!</span>
+                                     </p>
+                                 </div>
                              )}
                              
                              {/* MODIFICA PER JOINT CEREMONY: Il team vincente può votare se joint ceremony è attivo */}

@@ -61,7 +61,7 @@
           arrayUnion,
           serverTimestamp,
           deleteDoc,
-          getDocs // Importato getDocs per la pulizia
+          getDocs 
         } from 'firebase/firestore';
         import { 
           Heart, Users, Play, LogOut, MessageSquare, Skull, 
@@ -814,10 +814,12 @@
           const [selectedRedemptionCandidates, setSelectedRedemptionCandidates] = useState([]);
 
           const [selectedPlayer, setSelectedPlayer] = useState(null);
+          const [showRumorSelector, setShowRumorSelector] = useState(false); // NUOVO STATO
 
           useEffect(() => {
             setHasActed(false);
             setSelectedPlayer(null);
+            setShowRumorSelector(false);
           }, [lobby.phase, lobby.round]);
 
           useEffect(() => {
@@ -989,7 +991,7 @@
                  let winners = [];
                  Object.entries(rolls).forEach(([uid, r]) => {
                      if (r > maxRoll) { maxRoll = r; winners = [uid]; }
-                     else if (r === minRoll) { winners.push(uid); }
+                     else if (r === maxRoll) { winners.push(uid); } // FIXED HERE (was minRoll)
                  });
 
                  // FIX: LOGICA PAREGGIO (SPAREGGIO)
@@ -1440,14 +1442,24 @@
 
                  const immuneIds = lobby.players.filter(p => p.team === winningTeam && p.status === 'active').map(p => p.uid);
                  
-                 newLogs.push(`IL TEAM ${winningTeam} VINCE!`);
-                 newLogs.push(`Il team ${losingTeam} DEVE VOTARE.`);
+                 // --- 5% CHANCE JOINT CEREMONY ---
+                 const isJointCeremony = Math.random() < 0.05;
+                 
+                 if (isJointCeremony) {
+                     newLogs.push(`IL TEAM ${winningTeam} VINCE!`);
+                     newLogs.push("!!! COLPO DI SCENA !!! Chris: 'Stasera TUTTI andranno alla cerimonia!'");
+                     newLogs.push("I vincitori sono immuni, ma potranno votare per eliminare qualcuno degli avversari!");
+                 } else {
+                     newLogs.push(`IL TEAM ${winningTeam} VINCE!`);
+                     newLogs.push(`Il team ${losingTeam} DEVE VOTARE.`);
+                 }
 
                  updates = {
                     immunity: immuneIds,
                     losingTeam: losingTeam,
                     readyPlayers: [], // Reset per social
                     phase: 'social',
+                    twistData: isJointCeremony ? { type: 'joint_ceremony' } : null, // Set twist
                     logs: arrayUnion(...newLogs)
                  };
               }
@@ -1456,11 +1468,11 @@
 
             else if (lobby.phase === 'social') {
                 // --- KILLER TWIST CHECK ---
-                let twistData = null;
+                let twistData = lobby.twistData; // Mantieni dati esistenti (es. joint_ceremony)
                 const killerChance = Math.random() < 0.05; // 5% chance
                 
-                // Attiva solo se Merge e c'è un solo immune
-                if (isMerge && killerChance && lobby.immunity.length === 1) {
+                // Attiva solo se Merge e c'è un solo immune e non c'è già un twist attivo
+                if (isMerge && killerChance && lobby.immunity.length === 1 && !twistData) {
                     const killerId = lobby.immunity[0];
                     const killerName = lobby.players.find(p => p.uid === killerId)?.name;
                     twistData = { type: 'killer', killerId: killerId };
@@ -1783,9 +1795,9 @@
 
           const calculateBotVotes = (lobbyState, isMerge) => {
             const votes = {};
-            let activeBots = lobbyState.players.filter(p => { // Changed const to let
+            let activeBots = lobbyState.players.filter(p => { 
                 if (!p.isBot || p.status !== 'active') return false;
-                if (isMerge) return true;
+                if (isMerge || lobbyState.twistData?.type === 'joint_ceremony') return true; // Se joint ceremony, tutti i bot votano
                 return p.team === lobbyState.losingTeam;
             });
 
@@ -1793,9 +1805,7 @@
             if (lobbyState.twistData?.type === 'killer') {
                 const killerId = lobbyState.twistData.killerId;
                 const killerBot = activeBots.find(b => b.uid === killerId);
-                // Se il killer non è un bot, nessun bot vota.
                 if (!killerBot) return {};
-                // Se il killer è un bot, solo lui vota.
                 activeBots = [killerBot];
             }
             // ---------------------------
@@ -1825,7 +1835,7 @@
 
                 const victim = potentialVictims[Math.floor(Math.random() * potentialVictims.length)];
                 
-                votes[bot.uid] = victim.uid; // Correzione: uso chiave diretta per l'oggetto voti
+                votes[bot.uid] = victim.uid; 
             });
             return votes;
           };
@@ -1892,13 +1902,14 @@
               return { safe, bottomTwo, eliminated: [elimId], voteCounts: counts, tie: null };
           };
 
-          const handleInteraction = async (type) => {
+          const handleInteraction = async (type, payload = null) => { // Aggiunto parametro payload
               const targetId = selectedPlayer?.uid;
               if (!targetId || lobby.phase !== 'social' || hasActed || myPlayer.status === 'eliminated') return;
               
               let msg = "";
               let updatedPlayers = [...lobby.players];
               const targetIdx = updatedPlayers.findIndex(p => p.uid === targetId);
+              const myIdx = updatedPlayers.findIndex(p => p.uid === user.uid); 
               const targetName = updatedPlayers[targetIdx].name; 
               const actorName = myPlayer.name;
               
@@ -1909,6 +1920,59 @@
                       msg = `Hai stretto amicizia con ${updatedPlayers[targetIdx].name}.`;
                   } else msg = `${updatedPlayers[targetIdx].name} ti ha ignorato.`;
               } 
+              else if (type === 'rumor') {
+                  // Payload contiene l'ID della vittima scelta dall'utente
+                  const victimId = payload;
+                  const victim = updatedPlayers.find(p => p.uid === victimId);
+                  
+                  if (!victim) {
+                       msg = "Errore: bersaglio non trovato.";
+                  } else {
+                      if (Math.random() > 0.5) {
+                          // SUCCESSO (50%): Target odia Victim (-1)
+                          const currentRel = updatedPlayers[targetIdx].relationships[victimId] || 0;
+                          updatedPlayers[targetIdx].relationships = { 
+                              ...updatedPlayers[targetIdx].relationships, 
+                              [victimId]: Math.max(-5, currentRel - 1) 
+                          };
+                          msg = `🤫 Pssst! Hai messo zizzania con successo. ${targetName} ora guarda male ${victim.name} (-1).`;
+                      } else {
+                          // FALLIMENTO (50%): Target odia Te (-1)
+                          const currentRel = updatedPlayers[targetIdx].relationships[user.uid] || 0;
+                          updatedPlayers[targetIdx].relationships = { 
+                              ...updatedPlayers[targetIdx].relationships, 
+                              [user.uid]: Math.max(-5, currentRel - 1) 
+                          };
+                          msg = `😓 Hai provato a spettegolare su ${victim.name}, ma ${targetName} ti ha scoperto! (Relazione -1)`;
+                      }
+                  }
+              }
+              else if (type === 'flirt') {
+                  // Rischio: 40% Successo, 60% Fallimento
+                  if (Math.random() < 0.40) {
+                      // SUCCESSO: STATUS FIDANZATO
+                      // 1. Relazione alle stelle (15) - ORA È RECIPROCA!
+                      updatedPlayers[targetIdx].relationships = { ...updatedPlayers[targetIdx].relationships, [user.uid]: 15 };
+                      updatedPlayers[myIdx].relationships = { ...updatedPlayers[myIdx].relationships, [targetId]: 15 };
+                      
+                      // 2. Alleanza automatica reciproca
+                      const p1Allies = [...(updatedPlayers[targetIdx].alliances || []), user.uid];
+                      const p2Allies = [...(updatedPlayers[myIdx].alliances || []), targetId];
+                      
+                      updatedPlayers[targetIdx].alliances = [...new Set(p1Allies)];
+                      updatedPlayers[myIdx].alliances = [...new Set(p2Allies)];
+
+                      msg = `😍 Incredibile! Hai flirtato con ${targetName} ed è andata alla grande! Ora siete FIDANZATI e Alleati! (Relazione +15)`;
+                  } else {
+                      // FALLIMENTO
+                      const currentRel = updatedPlayers[targetIdx].relationships[user.uid] || 0;
+                      updatedPlayers[targetIdx].relationships = { 
+                          ...updatedPlayers[targetIdx].relationships, 
+                          [user.uid]: Math.max(-10, currentRel - 1) 
+                      };
+                      msg = `😳 Hai provato a flirtare con ${targetName}... che imbarazzo! Ti ha respinto. (Relazione -1)`;
+                  }
+              }
               else if (type === 'callout') {
                   if (Math.random() > 0.4) {
                      const randomOther = updatedPlayers.find(p => p.isBot && p.uid !== targetId && p.uid !== user.uid);
@@ -1924,10 +1988,33 @@
                      msg = `📢 ${targetName}! ${actorName} ha provato un Call Out contro di te (Fallito)!`;
                   }
               }
+              else if (type === 'threaten') {
+                  // Recupera lista minacciati, inizializza se non esiste
+                  const myThreats = updatedPlayers[myIdx].threatenedPlayers || [];
+                  
+                  if (myThreats.includes(targetId)) {
+                      return; // Già minacciato, blocco di sicurezza (anche se UI disabilita)
+                  }
+
+                  // Aggiungi target alla lista dei minacciati
+                  updatedPlayers[myIdx] = {
+                      ...updatedPlayers[myIdx],
+                      threatenedPlayers: [...myThreats, targetId]
+                  };
+
+                  // 30% di chance di successo (Math.random() < 0.30)
+                  if (Math.random() < 0.30) {
+                      // SUCCESSO: Max Relazione (Paura/Lealtà forzata)
+                      updatedPlayers[targetIdx].relationships = { ...updatedPlayers[targetIdx].relationships, [user.uid]: 10 };
+                      msg = `☠️ Hai minacciato ${targetName}! (SUCCESSO) Per paura, ti obbedirà ciecamente (Relazione +10).`;
+                  } else {
+                      // FALLIMENTO (70%): Odio puro
+                      updatedPlayers[targetIdx].relationships = { ...updatedPlayers[targetIdx].relationships, [user.uid]: -10 };
+                      msg = `💢 La minaccia è fallita! ${targetName} non ha paura di te e ora ti vuole fuori (Relazione -10).`;
+                  }
+              }
               else if (type === 'alliance') {
                  if ((updatedPlayers[targetIdx].relationships[user.uid] || 0) <= 0) {
-                     // Non uso alert() come da istruzioni, ma un console log con fallback UI 
-                     // per far capire che l'azione non è andata a buon fine.
                      console.error("Devi essere amico per proporre un'alleanza!");
                      msg = `${updatedPlayers[targetIdx].name} ha rifiutato l'alleanza. (Devi essere amico!)`;
                  }
@@ -1954,6 +2041,7 @@
               });
               setHasActed(true);
               setSelectedPlayer(null);
+              setShowRumorSelector(false); // Reset
           };
 
           const submitVote = async (targetId) => {
@@ -1961,21 +2049,49 @@
               
               // --- KILLER TWIST CHECK ---
               if (lobby.twistData?.type === 'killer' && user.uid !== lobby.twistData.killerId) {
-                  // Impedisce il voto se non sei il killer
                   return;
               }
-              // ---------------------------
 
               const myTeam = myPlayer.team;
               const losingTeam = lobby.losingTeam;
-              if (!isMerge && myTeam !== losingTeam) {
+              // --- JOINT CEREMONY CHECK ---
+              // Se siamo in joint ceremony, anche il team vincente può votare
+              if (!isMerge && myTeam !== losingTeam && lobby.twistData?.type !== 'joint_ceremony') {
                   console.error("NON PUOI VOTARE! Il tuo team ha vinto l'immunità.");
                   return;
               }
 
-              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), {
+              // Prepariamo l'oggetto updates con il TUO voto
+              let updates = {
                   [`votes.${user.uid}`]: targetId
-              });
+              };
+
+              // --- LOGICA ALLEATI (50% Chance di seguire il voto) ---
+              // Se hai degli alleati, potrebbero decidere di fidarsi di te e votare uguale.
+              if (lobby.twistData?.type !== 'killer') {
+                  const myAllies = lobby.players.filter(p => 
+                      p.isBot && 
+                      p.status === 'active' && 
+                      Array.isArray(p.alliances) && 
+                      p.alliances.includes(user.uid)
+                  );
+
+                  myAllies.forEach(ally => {
+                      // Controlla se l'alleato può votare in questa fase
+                      // (Deve essere Merge, oppure Joint Ceremony, oppure deve essere nel team perdente)
+                      const canVote = isMerge || lobby.twistData?.type === 'joint_ceremony' || ally.team === losingTeam;
+                      
+                      if (canVote) {
+                          // 50% di probabilità che l'alleato copi il tuo voto
+                          if (Math.random() < 0.50) {
+                              updates[`votes.${ally.uid}`] = targetId;
+                              console.log(`L'alleato ${ally.name} ti ha seguito nel voto!`);
+                          }
+                      }
+                  });
+              }
+
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', lobbyId), updates);
           };
 
           const teams = useMemo(() => {
@@ -1994,18 +2110,19 @@
               if (lobby.twistData?.type === 'killer') {
                   const killerId = lobby.twistData.killerId;
                   const killer = lobby.players.find(p => p.uid === killerId);
-                  // Se il killer è umano e non ha ancora votato, pending è 1. Altrimenti 0.
                   if (killer && !killer.isBot && !lobby.votes?.[killerId]) {
                       return 1;
                   }
                   return 0;
               }
-              // ---------------------------
 
-              const voters = isMerge 
+              // --- JOINT CEREMONY LOGIC ---
+              const isJoint = lobby.twistData?.type === 'joint_ceremony';
+              
+              const voters = (isMerge || isJoint)
                   ? activePlayers 
                   : activePlayers.filter(p => p.team === lobby.losingTeam);
-              // Correzione: Filtro via i bot dal conteggio pending
+                  
               return voters.filter(p => !p.isBot && !lobby.votes?.[p.uid]).length;
           }, [lobby.phase, lobby.votes, isMerge, activePlayers, lobby.losingTeam, lobby.twistData]);
 
@@ -2024,14 +2141,17 @@
                {selectedPlayer && lobby.phase === 'social' && (
                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
                        <div className="bg-slate-900 rounded-2xl border-2 border-yellow-500 max-w-sm w-full relative">
-                           <button onClick={() => setSelectedPlayer(null)} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"><X size={20}/></button>
+                           <button onClick={() => { setSelectedPlayer(null); setShowRumorSelector(false); }} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"><X size={20}/></button>
                            <div className="p-6 text-center">
                                <h2 className="text-3xl font-black mb-1">{selectedPlayer.name}</h2>
                                <div className="text-sm text-slate-400 mb-4">{selectedPlayer.team || "Merge"}</div>
                                <div className="grid grid-cols-2 gap-4 mb-6">
                                    <div className="bg-slate-800 p-2 rounded">
                                        <div className="text-xs uppercase">Amicizia</div>
-                                       <div className={`text-xl font-bold ${(selectedPlayer.relationships[user.uid] || 0) > 0 ? 'text-green-500' : 'text-red-500'}`}>{selectedPlayer.relationships[user.uid] || 0}</div>
+                                       {/* MODIFICA: Colore Rosa se relazione == 15 (Fidanzati) */}
+                                       <div className={`text-xl font-bold ${(selectedPlayer.relationships[user.uid] || 0) === 15 ? 'text-pink-500' : (selectedPlayer.relationships[user.uid] || 0) > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                           {(selectedPlayer.relationships[user.uid] || 0) === 15 ? "❤️ 15" : (selectedPlayer.relationships[user.uid] || 0)}
+                                       </div>
                                    </div>
                                    <div className="bg-slate-800 p-2 rounded">
                                        <div className="text-xs uppercase">Alleato?</div>
@@ -2039,11 +2159,62 @@
                                    </div>
                                </div>
                                {!hasActed && myPlayer.status === 'active' && (
+                                   !showRumorSelector ? (
                                    <div className="space-y-2">
                                        <button onClick={() => handleInteraction('friend')} className="w-full bg-green-600 py-3 rounded font-bold flex justify-center gap-2"><Heart/> Amicizia</button>
+                                       
+                                       {/* MODIFICA: Logica Fedeltà */}
+                                       {(() => {
+                                           // Controlla se il giocatore ha già una relazione a 15 con QUALCUNO
+                                           const isEngaged = Object.values(myPlayer.relationships || {}).some(v => v === 15);
+                                           
+                                           return (
+                                               <button 
+                                                   onClick={() => handleInteraction('flirt')} 
+                                                   disabled={isEngaged}
+                                                   className={`w-full py-3 rounded font-bold flex justify-center gap-2 ${isEngaged ? 'bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600' : 'bg-pink-600 hover:bg-pink-500'}`}
+                                               >
+                                                   <Heart fill={isEngaged ? "none" : "currentColor"}/> {isEngaged ? "GIÀ IMPEGNATO" : "Flirta (40%)"}
+                                               </button>
+                                           );
+                                       })()}
+
                                        <button onClick={() => handleInteraction('alliance')} className="w-full bg-blue-600 py-3 rounded font-bold flex justify-center gap-2"><Swords/> Alleanza</button>
+                                       <button onClick={() => setShowRumorSelector(true)} className="w-full bg-purple-600 py-3 rounded font-bold flex justify-center gap-2"><MessageSquare/> Metti Zizzania (50%)</button>
                                        <button onClick={() => handleInteraction('callout')} className="w-full bg-orange-600 py-3 rounded font-bold flex justify-center gap-2"><AlertTriangle/> Call Out</button>
+                                       {(() => {
+                                           const hasThreatened = (myPlayer.threatenedPlayers || []).includes(selectedPlayer.uid);
+                                           return (
+                                               <button 
+                                                   onClick={() => handleInteraction('threaten')} 
+                                                   disabled={hasThreatened}
+                                                   className={`w-full py-3 rounded font-bold flex justify-center gap-2 border ${hasThreatened ? 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed' : 'bg-red-800 hover:bg-red-700 text-white border-red-600'}`}
+                                               >
+                                                   <Skull/> {hasThreatened ? "GIÀ MINACCIATO" : "Minaccia (30%)"}
+                                               </button>
+                                           );
+                                       })()}
                                    </div>
+                                   ) : (
+                                     <div className="animate-in fade-in">
+                                         <div className="text-sm font-bold text-slate-300 mb-2">Di chi vuoi sparlare?</div>
+                                         <div className="grid grid-cols-3 gap-2 mb-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                             {lobby.players
+                                                 .filter(p => p.uid !== user.uid && p.uid !== selectedPlayer.uid && p.status === 'active')
+                                                 .map(p => (
+                                                     <button key={p.uid} onClick={() => handleInteraction('rumor', p.uid)} className="bg-slate-800 hover:bg-slate-700 p-2 rounded flex flex-col items-center border border-slate-700 hover:border-purple-500 transition">
+                                                         <img src={p.character.img} className="w-8 h-8 rounded-full mb-1 object-cover"/>
+                                                         <span className="text-[10px] truncate w-full leading-tight">{p.name}</span>
+                                                     </button>
+                                                 ))
+                                             }
+                                             {lobby.players.filter(p => p.uid !== user.uid && p.uid !== selectedPlayer.uid && p.status === 'active').length === 0 && (
+                                                <div className="col-span-3 text-xs text-slate-500 italic py-2">Nessun altro attivo.</div>
+                                             )}
+                                         </div>
+                                         <button onClick={() => setShowRumorSelector(false)} className="w-full bg-slate-700 hover:bg-slate-600 py-2 rounded text-xs font-bold flex items-center justify-center gap-1"><Undo2 size={14}/> Annulla</button>
+                                     </div>
+                                   )
                                )}
                            </div>
                        </div>
@@ -2116,7 +2287,6 @@
                      
                      {/* --- IDOL HUNT VIEW --- */}
                      {lobby.phase === 'idol_hunt' && lobby.idolData && (
-                         // ... (codice esistente)
                          <div className="flex flex-col items-center justify-center min-h-[80vh]">
                             <h2 className="text-4xl font-black text-yellow-400 mb-2 uppercase drop-shadow-lg">CACCIA AL TESORO</h2>
                             <p className="text-slate-300 mb-8 max-w-xl text-center">
@@ -2189,7 +2359,6 @@
 
                      {/* --- REDEMPTION VIEW --- */}
                      {lobby.phase === 'redemption' && lobby.redemptionData && (
-                        // ... (codice esistente)
                          <div className="flex flex-col items-center justify-center min-h-full">
                              <div className="text-center mb-8">
                                  <h1 className="text-5xl font-black text-orange-500 mb-2 uppercase tracking-widest drop-shadow-md">Redemption Island</h1>
@@ -2285,7 +2454,6 @@
                      )}
 
                     {lobby.phase === 'season_setup' && isHost && nextSeasonConfig && (
-                        // ... (codice esistente)
                         <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
                             <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl border-2 border-yellow-500 max-w-lg w-full">
                                 <h2 className="text-3xl font-black text-center mb-6 text-yellow-400">CONFIGURA STAGIONE {lobby.currentSeasonIndex + 2}</h2>
@@ -2357,7 +2525,6 @@
                     )}
                      
                      {lobby.phase === 'challenge' && isMerge && lobby.challengeData && (
-                        // ... (codice esistente)
                         <div className="flex flex-col items-center justify-center min-h-[60vh]">
                             {lobby.challengeData.stage === 'rolling' ? (
                                 <div className="text-center animate-pulse w-full max-w-4xl">
@@ -2458,7 +2625,8 @@
                                  <h2 className="text-3xl font-black mb-2 flex items-center gap-2"><Vote /> CHI VUOI ELIMINARE?</h2>
                              )}
                              
-                             {!isMerge && myPlayer.team !== lobby.losingTeam ? (
+                             {/* MODIFICA PER JOINT CEREMONY: Il team vincente può votare se joint ceremony è attivo */}
+                             {!isMerge && myPlayer.team !== lobby.losingTeam && lobby.twistData?.type !== 'joint_ceremony' ? (
                                  <div className="mt-8 bg-green-600/20 border-2 border-green-500 p-8 rounded-2xl text-center animate-in zoom-in">
                                      <Coffee size={48} className="mx-auto mb-4 text-green-400" />
                                      <h3 className="text-2xl font-black text-green-400 mb-2">SEI SALVO!</h3>
@@ -2646,7 +2814,7 @@
                      )}
 
                      {(lobby.phase === 'social' || lobby.phase === 'ceremony') && (
-                         // ... (codice esistente)
+                        // ... (codice esistente)
                          <>
                          {lobby.phase === 'social' && !isMerge && lobby.losingTeam && (
                             <div className="bg-red-600/90 text-white p-4 rounded-xl mb-4 text-center font-black text-xl shadow-lg border-2 border-red-400 animate-pulse">
@@ -2779,7 +2947,8 @@
                                                            {!isMe && (
                                                                <div className="absolute top-1 left-1 flex flex-col gap-1">
                                                                    {rel !== 0 && (
-                                                                       <div className={`text-[10px] font-black px-1 rounded flex items-center gap-0.5 ${rel > 0 ? 'bg-green-600' : 'bg-red-600'}`}>
+                                                                       // MODIFICA: Colore background Rosa se relazione == 15
+                                                                       <div className={`text-[10px] font-black px-1 rounded flex items-center gap-0.5 ${rel === 15 ? 'bg-pink-600' : rel > 0 ? 'bg-green-600' : 'bg-red-600'}`}>
                                                                            <Heart size={8} fill="currentColor"/> {rel}
                                                                        </div>
                                                                    )}

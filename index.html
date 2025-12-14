@@ -1946,7 +1946,10 @@
                   } else msg = `${updatedPlayers[targetIdx].name} ti ha ignorato.`;
               } 
               else if (type === 'rumor') {
-                  // ... existing logic ...
+                  // Payload contiene l'ID della vittima scelta dall'utente
+                  const victimId = payload;
+                  const victim = updatedPlayers.find(p => p.uid === victimId);
+                  
                   if (!victim) {
                        msg = "Errore: bersaglio non trovato.";
                   } else {
